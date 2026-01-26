@@ -1,88 +1,57 @@
-﻿# CamDash
+# CamDash
 
-CamDash is a lightweight, browser-based CCTV dashboard for kiosk and monitoring displays. It shows up to four HLS camera streams per page, supports automatic page cycling, manual navigation, and tuned live-playback settings for smooth, low-latency viewing.
+CamDash is a lightweight CCTV dashboard for kiosk and monitoring screens. It shows live HLS tiles, supports page cycling, and can be centrally configured through a small API and SQLite database.
 
-## Highlights
-- 4-up camera dashboard with paging
-- Auto-cycle with 30/60/90s intervals
-- Hls.js playback (or native HLS on Safari)
-- Clean, kiosk-first UI with hidden topbar
+## What you get
+- Kiosk-first UI with hidden topbar
+- 1-6 cameras per slide (auto grid)
+- Auto page cycling (30/60/90s)
+- Admin UI to add cameras and build slideshows
+- Central config stored in SQLite (not browser storage)
 
-## Quick start
-1. Edit `dashboard/config.js` and define your pages and camera ids.
-2. Serve the `dashboard` folder from a static web server:
+## Architecture
+- `dashboard/` static UI (kiosk)
+- `api/` Node + SQLite API (config storage)
+- `go2rtc` (optional) to proxy/convert RTSP -> HLS
+- `nginx` serves the UI and proxies API + go2rtc
 
+## Quick start (Docker)
 ```bash
-cd dashboard
-python -m http.server 8000
-# open http://localhost:8000/ in your kiosk browser
+docker compose up -d --build
 ```
 
-3. If you proxy camera streams through `go2rtc`, set `go2rtcBase` in `config.js` to the proxy base URL (or leave empty to use same-origin `/api`).
+Open the UI:
+- http://<host>:8080/
 
-## Configuration reference
-Top-level options in `dashboard/config.js`:
+Open Admin UI:
+- http://<host>:8080/?admin=1
+- or press `Ctrl + Shift + A`
 
-- `go2rtcBase` - base URL for HLS proxy (optional)
-- `defaultSeconds` - default page cycle interval (30/60/90)
-- `autoCycle` - enable/disable automatic paging
-- `dataSource` - where cameras/slides come from
-  - `mode` - `remote` (DB) or `local` (use `pages` below)
-  - `apiBase` - API base path (default `/camdash-api`)
-  - `refreshSeconds` - remote refresh interval
-- `ui` - UI settings
-  - `topbarAutoHide` - hide topbar until hover
-  - `topbarHotspotPx` - hover hotspot height in pixels
-  - `showClock` / `showTimer` / `showPage` - visibility toggles
-  - `showBrand` / `showNav` - show or hide brand and prev/next controls
-  - `showBadges` / `showLiveBadge` - toggle camera badges and LIVE chip
-  - `showEmptyLabels` - show labels in empty tiles
-  - `showBackgroundGrid` - show the background grid texture
-  - `compact` - denser topbar layout
-  - `layout` - `fixed` (always 2x2) or `auto` (adapt to camera count)
-  - `includeLocationInLabel` - append location to camera labels
-  - `adminEnabled` / `showAdminButton` - enable admin UI and show button
-  - `titlePrefix` - document title prefix
-  - `labels` - override UI text labels (prev/next/timer/etc.)
-  - `theme` - override CSS variables (accent, bg, border, etc.)
-- `hls` - Hls.js tuning overrides (optional)
-- `pages` - array of pages with camera entries: `{ name, cams: [{ id, label }, ...] }`
+## Admin UI workflow
+1) Add cameras (name, location, source)
+2) Create a profile (slideshow)
+3) Create slides and assign up to 6 cameras per slide
+4) Set the profile active
 
-Example UI overrides:
+Changes are stored in `./data/camdash.db`.
 
-```js
-ui: {
-  compact: true,
-  showBadges: false,
-  showBackgroundGrid: false,
-  layout: "auto",
-  titlePrefix: "CamDash Lobby",
-  labels: { prev: "Zuruck", next: "Weiter", live: "LIVE" },
-  theme: { accent: "#ffb84a", bg: "#0a0d12" },
-}
-```
+## Configuration (dashboard/config.js)
+Key options:
+- `go2rtcBase`: base URL for HLS (`http://<server>:1984`) or empty for `/api`
+- `dataSource.mode`: `remote` (DB) or `local` (use `pages` below)
+- `dataSource.apiBase`: API base path (`/camdash-api`)
+- `dataSource.refreshSeconds`: refresh interval for remote state
+- `ui.*`: display toggles, labels, theme overrides
+- `hls.*`: Hls.js tuning
+- `pages`: local fallback pages (used only if `dataSource.mode = "local"`)
 
-## Remote config + Admin UI
-If `dataSource.mode` is `remote`, CamDash loads cameras and slides from the API container. The admin UI lets you add and edit cameras, create profiles (slideshows), and assign cameras to slides.
-
-Admin UI access:
-- Press `Ctrl + Shift + A` in the browser, or
-- Open with `?admin=1` in the URL, or
-- Set `ui.showAdminButton = true` to show a topbar button.
-
-## API container
-The API is started automatically by `docker compose up -d`. Data is stored in `./data/camdash.db` on the host.
-Maximum cameras per slide is 6 (change with `CAMDASH_MAX_CAMS` on the API container).
-
-## Import old config/go2rtc streams
-You can import your old `config.js` and `go2rtc.yml` into the DB:
-
+## Import existing config
+Import your current `dashboard/config.js` + `go2rtc.yml` into the DB:
 ```bash
 node api/import-config.js --reset --replace --profile "Default"
 ```
 
-Or run inside the container:
-
+Container version:
 ```bash
 docker compose run --rm api node /app/import-config.js --reset --replace --profile "Default"
 ```
@@ -92,24 +61,20 @@ Options:
 - `--config <path>` (default `./dashboard/config.js`)
 - `--db <path>` (default `./data/camdash.db`)
 - `--profile <name>` (default `Default`)
-- `--reset` wipes DB first
-- `--replace` replaces slides in an existing profile
-- `--dry-run` prints what would be imported
+- `--reset` wipe DB
+- `--replace` replace slides in existing profile
+- `--dry-run` print summary
 
-## URL parameters
-- `t` - timer in seconds (`30`, `60`, `90`)
-- `p` - page index (1-based)
-
-## Docker (go2rtc + nginx)
-The included `docker-compose.yml` runs `go2rtc` and an `nginx` web service. `nginx` serves the UI and proxies `/api/` to `go2rtc` to avoid cross-origin issues.
-
-```bash
-docker compose up -d --build
-```
+## go2rtc
+If you use go2rtc, define streams in `go2rtc.yml` and reference the stream ID in the camera source (e.g., `einfahrt_2`).
 
 ## Troubleshooting
-- If a stream shows `HLS unsupported`, make sure Hls.js is loaded (the app includes a CDN import) or the browser supports native HLS.
-- If playback stalls, check network connectivity to the HLS source and adjust `hls` options in `dashboard/config.js`.
+- No cameras after git pull: the DB is empty. Use Admin UI or import.
+- API offline: check `docker compose ps` and `/camdash-api/health`.
+- HLS unsupported: ensure Hls.js loads or use Safari/native HLS.
+
+## Security note
+The admin UI and API are not authenticated by default. If exposed outside a trusted network, add authentication or restrict access at the network/proxy level.
 
 ## License
 MIT. See `LICENSE`.

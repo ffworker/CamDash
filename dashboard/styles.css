@@ -23,12 +23,28 @@ body{
 }
 
 .topbar{
-  position:sticky; top:0; z-index:5;
+  position:fixed; top:0; left:0; right:0; z-index:50;
   display:flex; align-items:center; justify-content:space-between;
   padding:14px 18px;
   border-bottom:1px solid var(--border);
   background:rgba(9,13,22,.72);
   backdrop-filter: blur(10px);
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: transform .18s ease, opacity .18s ease;
+  pointer-events: none;
+}
+
+.topbar-hotspot{
+  position:fixed; top:0; left:0; right:0; height:6px; z-index:49;
+  background:transparent;
+}
+
+.topbar-hotspot:hover + .topbar,
+.topbar:hover{
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .brand{display:flex; align-items:center; gap:12px}
@@ -87,7 +103,7 @@ body{
 }
 .suffix{ color: var(--muted); padding-left:4px; padding-right:2px; }
 
-.wrap{padding:16px; height:calc(100vh - 60px)}
+.wrap{padding:8px; height:100vh}
 .grid{
   height:100%;
   display:grid;

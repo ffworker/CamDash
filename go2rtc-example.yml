@@ -1,0 +1,35 @@
+streams:
+  einfahrt_1: "rtsp://admin:admin@<SUBNET>:554/Master-0"
+  einfahrt_2: "rtsp://<>Master-0" 
+  rampe_1: "rtsp://admin:password@<SUBNET>.12:554/Master-0" 
+  rampe_2: "rtsp://admin:password@<SUBNET>:554/live" 
+  ausfahrt: "rtsp://admin:password@<SUBNET>:554/Master-0" 
+  ausfahrt_schranke: "rtsp://admin:admin@<SUBNET>:554/Master-0" 
+
+  turm: "rtsp://admin:password@<SUBNET>/live" 
+  schranke: "rtsp://admin:password@<SUBNET>/live" 
+  container: "rtsp://admin:password@<SUBNET/live" 
+  zelt: "rtsp://admin:password@<SUBNET>/live" 
+
+  containerlager: "rtsp://admin:password@<SUBNET>/live" 
+
+  fahrweg_1_1: "rtsp://<SUBNET>:554/Master-0"
+  fahrweg_1_2: "rtsp://admin:password@<SUBNET>:554/Master-0" 
+
+  fahrweg_2_1: "rtsp://admin:password@<SUBNET>:554/live"
+  fahrweg_2_2: "rtsp://admin:password@<SUBNET>:554/live"
+  fahrweg_2_3: "rtsp://admin:password@<SUBNET>:554/cam/realmonitor?channel=1&subtype=00&authbasic=YWRtaW46MTJMb2dzZXJ2MzQ="
+  fahrweg_2_4: "rtsp://admin:password@<SUBNET>:554/live"
+  mittelgang:  "rtsp://admin:password@<SUBNET>:554/Master-0"
+
+  fahrweg_3_1: "rtsp://admin:password@<SUBNET>:554/live"
+  fahrweg_3_2: "rtsp://admin:password@<SUBNET>:554/live"
+  fahrweg_3_3: "rtsp://admin:password@<SUBNET>:554/live"
+  fahrweg_3_4: "rtsp://admin:admin@<SUBNET>:554/Master-0"
+
+api:
+  listen: ":1984"
+rtsp:
+  listen: ":8554"
+webrtc:
+  listen: ":8555"

@@ -9,10 +9,41 @@ const sqlite3 = require("sqlite3");
 const PORT = parseInt(process.env.CAMDASH_PORT || "3000", 10);
 const DB_PATH = process.env.CAMDASH_DB || path.join(__dirname, "..", "data", "camdash.db");
 const MAX_CAMS_PER_SLIDE = parseInt(process.env.CAMDASH_MAX_CAMS || "6", 10);
+const ADMIN_USER = process.env.CAMDASH_ADMIN_USER || "";
+const ADMIN_PASS = process.env.CAMDASH_ADMIN_PASS || "";
+const AUTH_ENABLED = Boolean(ADMIN_USER && ADMIN_PASS);
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
+
+function parseBasicAuth(header) {
+  if (!header || !header.startsWith("Basic ")) return null;
+  const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
+  const separator = decoded.indexOf(":");
+  if (separator === -1) return null;
+  return {
+    user: decoded.slice(0, separator),
+    pass: decoded.slice(separator + 1),
+  };
+}
+
+function isAuthorized(req) {
+  if (!AUTH_ENABLED) return true;
+  const creds = parseBasicAuth(req.headers.authorization);
+  return Boolean(creds && creds.user === ADMIN_USER && creds.pass === ADMIN_PASS);
+}
+
+function unauthorized(res) {
+  res.status(401).json({ error: "unauthorized" });
+}
+
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") return next();
+  if (req.method === "GET" && req.path !== "/auth") return next();
+  if (!isAuthorized(req)) return unauthorized(res);
+  return next();
+});
 
 let db;
 
@@ -143,6 +174,10 @@ async function fetchState() {
     cameras,
   };
 }
+
+app.get("/auth", (_req, res) => {
+  res.json({ ok: true, enabled: AUTH_ENABLED });
+});
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });

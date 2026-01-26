@@ -15,17 +15,38 @@ CamDash is a lightweight CCTV dashboard for kiosk and monitoring screens. It sho
 - `go2rtc` (optional) to proxy/convert RTSP -> HLS
 - `nginx` serves the UI and proxies API + go2rtc
 
-## Quick start (Docker)
+## Installation and run (Docker)
+Prerequisites:
+- Docker + Docker Compose
+- (Optional) go2rtc running via the included compose service
+
+Start everything:
 ```bash
 docker compose up -d --build
 ```
 
+What starts:
+- `go2rtc` (RTSP -> HLS, optional but recommended)
+- `api` (CamDash config storage)
+- `nginx` (serves UI + proxies API + go2rtc)
+
 Open the UI:
 - http://<host>:8080/
 
-Open Admin UI:
+Admin UI (choose one):
 - http://<host>:8080/?admin=1
-- or press `Ctrl + Shift + A`
+- `Ctrl + Shift + A` in the browser
+
+## Admin login
+The admin UI is protected by basic login (API). Default credentials from `docker-compose.yml`:
+- user: `admin`
+- pass: `changeme`
+
+Change them in `docker-compose.yml`:
+```
+CAMDASH_ADMIN_USER=youruser
+CAMDASH_ADMIN_PASS=yourpass
+```
 
 ## Admin UI workflow
 1) Add cameras (name, location, source)
@@ -55,6 +76,13 @@ Container version:
 ```bash
 docker compose run --rm api node /app/import-config.js --reset --replace --profile "Default"
 ```
+
+## Where the admin page lives
+Default URL:
+- http://<host>:8080/?admin=1
+
+Keyboard shortcut:
+- `Ctrl + Shift + A`
 
 Options:
 - `--go2rtc <path>` (default `./go2rtc.yml`)

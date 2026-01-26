@@ -106,3 +106,95 @@ The admin UI and API are not authenticated by default. If exposed outside a trus
 
 ## License
 MIT. See `LICENSE`.
+
+---
+
+# CamDash (Deutsch)
+
+CamDash ist ein leichtgewichtiges CCTV-Dashboard für Kiosk‑ und Monitoring‑Screens. Es zeigt Live‑HLS‑Kacheln, unterstützt das automatische Durchblättern der Slides und speichert Konfigurationen zentral in einer SQLite‑DB.
+
+## Installation & Start (Docker)
+Voraussetzungen:
+- Docker + Docker Compose
+- (Optional) go2rtc über das mitgelieferte Compose‑Setup
+
+Start:
+```bash
+docker compose up -d --build
+```
+
+UI öffnen:
+- http://<host>:8080/
+
+Admin‑UI öffnen:
+- http://<host>:8080/?admin=1
+- oder `Strg + Shift + A` im Browser
+
+## Admin‑Login
+Standard‑Zugangsdaten (aus `docker-compose.yml`):
+- Benutzer: `admin`
+- Passwort: `changeme`
+
+Ändern in `docker-compose.yml`:
+```
+CAMDASH_ADMIN_USER=deinuser
+CAMDASH_ADMIN_PASS=deinpass
+```
+
+## Admin‑Workflow
+1) Kameras anlegen (Name, Ort, Quelle)
+2) Profil (Slideshow) anlegen
+3) Slides erstellen und Kameras zuweisen (max. 6 pro Slide)
+4) Profil aktiv setzen
+
+## Import vorhandener Konfiguration
+```bash
+node api/import-config.js --reset --replace --profile "Default"
+```
+
+## Debian Kiosk‑Modus (Platzhalter)
+### Debian 12 + GNOME (GDM) – Firefox Kiosk (Platzhalter‑URL)
+**Ziel:** GNOME startet automatisch einen Kiosk‑Benutzer und öffnet Firefox im Kiosk‑Modus.
+
+1) Pakete installieren:
+```bash
+sudo apt update
+sudo apt install firefox-esr gdm3
+```
+
+2) Kiosk‑Benutzer anlegen (Beispiel: `kiosk`):
+```bash
+sudo useradd -m -s /bin/bash kiosk
+sudo passwd kiosk
+```
+
+3) GDM Autologin aktivieren (`/etc/gdm3/daemon.conf`):
+```ini
+[daemon]
+AutomaticLoginEnable=true
+AutomaticLogin=kiosk
+```
+
+4) Autostart für Firefox Kiosk (`/home/kiosk/.config/autostart/camdash-kiosk.desktop`):
+```ini
+[Desktop Entry]
+Type=Application
+Name=CamDash Kiosk
+Exec=firefox --kiosk "http://<HOST>:8080/"
+X-GNOME-Autostart-enabled=true
+```
+
+5) Bildschirm‑Sperre/Blanking deaktivieren (als `kiosk` ausführen):
+```bash
+gsettings set org.gnome.desktop.screensaver lock-enabled false
+gsettings set org.gnome.desktop.session idle-delay 0
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'nothing'
+```
+
+6) Neustarten:
+```bash
+sudo reboot
+```
+
+**Hinweis:** Ersetze die URL durch deine CamDash‑Adresse (Platzhalter).

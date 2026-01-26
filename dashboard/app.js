@@ -31,6 +31,13 @@
     adminBtn: document.getElementById("adminBtn"),
     adminOverlay: document.getElementById("adminOverlay"),
     adminClose: document.getElementById("adminClose"),
+    adminAuth: document.getElementById("adminAuth"),
+    adminAuthForm: document.getElementById("adminAuthForm"),
+    adminAuthError: document.getElementById("adminAuthError"),
+    adminUser: document.getElementById("adminUser"),
+    adminPass: document.getElementById("adminPass"),
+    adminTabs: document.getElementById("adminTabs"),
+    adminBody: document.getElementById("adminBody"),
     adminCameras: document.getElementById("adminCameras"),
     adminProfiles: document.getElementById("adminProfiles"),
   };
@@ -74,6 +81,7 @@
     timer: "camdash.timer",
     page: "camdash.page",
   };
+  const AUTH_STORAGE_KEY = "camdash.adminAuth";
 
   const adminState = {
     open: false,
@@ -86,6 +94,7 @@
 
   const config = normalizeConfig(cfg);
 
+  let adminAuthHeader = loadAdminAuth();
   let pages = [];
   let dataState = null;
   let maxCamsPerSlide = 6;
@@ -385,6 +394,84 @@
     }
   }
 
+  async function ensureAdminAccess() {
+    const status = await checkAdminAuth();
+    if (status.ok) {
+      showAdminAuth(false);
+      return true;
+    }
+
+    if (status.offline) {
+      showAdminAuth(true, "API offline. Start the API container.");
+      return false;
+    }
+
+    showAdminAuth(true, "Login required.");
+    return false;
+  }
+
+  async function checkAdminAuth() {
+    try {
+      const headers = adminAuthHeader ? { Authorization: adminAuthHeader } : {};
+      const res = await fetch(`${config.dataSource.apiBase}/auth`, { headers, cache: "no-store" });
+      if (res.ok) {
+        return { ok: true };
+      }
+      if (res.status === 401) {
+        saveAdminAuth(null);
+        adminAuthHeader = null;
+        return { ok: false, required: true };
+      }
+      return { ok: false };
+    } catch (err) {
+      return { ok: false, offline: true };
+    }
+  }
+
+  function showAdminAuth(show, message) {
+    if (!dom.adminAuth) return;
+    setVisible(dom.adminAuth, show);
+    setAdminContentVisible(!show);
+    if (dom.adminAuthError) dom.adminAuthError.textContent = message || "";
+    if (show && dom.adminUser) dom.adminUser.focus();
+  }
+
+  function setAdminContentVisible(visible) {
+    setVisible(dom.adminTabs, visible);
+    setVisible(dom.adminBody, visible);
+  }
+
+  async function handleAdminLogin() {
+    const user = cleanText(dom.adminUser?.value);
+    const pass = dom.adminPass?.value || "";
+
+    if (!user || !pass) {
+      if (dom.adminAuthError) dom.adminAuthError.textContent = "Username and password required.";
+      return;
+    }
+
+    const header = `Basic ${btoa(`${user}:${pass}`)}`;
+
+    try {
+      const res = await fetch(`${config.dataSource.apiBase}/auth`, {
+        headers: { Authorization: header },
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        if (dom.adminAuthError) dom.adminAuthError.textContent = "Invalid credentials.";
+        return;
+      }
+
+      adminAuthHeader = header;
+      saveAdminAuth(header);
+      showAdminAuth(false);
+      renderAdmin();
+    } catch (err) {
+      if (dom.adminAuthError) dom.adminAuthError.textContent = "API offline.";
+    }
+  }
+
   async function toggleAdmin(open) {
     if (!dom.adminOverlay) return;
 
@@ -401,6 +488,11 @@
 
     if (!dataState) {
       await refreshRemoteState(true);
+    }
+
+    const access = await ensureAdminAccess();
+    if (!access) {
+      return;
     }
 
     renderAdmin();
@@ -724,7 +816,13 @@
 
   function handleAdminSubmit(event) {
     const form = event.target;
-    if (!form || form.id !== "cameraForm") return;
+    if (!form) return;
+    if (form.id === "adminAuthForm") {
+      event.preventDefault();
+      handleAdminLogin();
+      return;
+    }
+    if (form.id !== "cameraForm") return;
     event.preventDefault();
     saveCamera(form);
   }
@@ -970,10 +1068,18 @@
   }
 
   async function apiFetch(path, options) {
+    const headers = { "Content-Type": "application/json" };
+    if (adminAuthHeader) headers.Authorization = adminAuthHeader;
+
     const res = await fetch(`${config.dataSource.apiBase}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers,
       ...options,
     });
+
+    if (res.status === 401) {
+      showAdminAuth(true, "Login required.");
+      throw new Error("unauthorized");
+    }
 
     if (!res.ok) {
       const text = await res.text();
@@ -1303,6 +1409,21 @@
     } catch (_) {
       return null;
     }
+  }
+
+  function loadAdminAuth() {
+    try {
+      return sessionStorage.getItem(AUTH_STORAGE_KEY);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function saveAdminAuth(value) {
+    try {
+      if (value) sessionStorage.setItem(AUTH_STORAGE_KEY, value);
+      else sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch (_) {}
   }
 
   function setVisible(el, visible) {

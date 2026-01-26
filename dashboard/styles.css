@@ -269,6 +269,7 @@ button{
 }
 
 .admin-panel{
+  position:relative;
   width:min(1200px, 94vw);
   max-height:90vh;
   background:rgba(12,15,22,.95);
@@ -278,6 +279,32 @@ button{
   display:flex;
   flex-direction:column;
   overflow:hidden;
+}
+
+.admin-auth{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(10,12,18,.75);
+  z-index:10;
+  padding:24px;
+}
+
+.admin-auth-card{
+  width:min(420px, 90vw);
+  background:rgba(14,18,26,.98);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:16px;
+  box-shadow: var(--shadow);
+}
+
+.admin-auth-title{
+  font-size:14px;
+  font-weight:600;
+  margin-bottom:10px;
 }
 
 .admin-header{

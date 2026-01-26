@@ -62,11 +62,30 @@
         <div class="admin-title">CamDash Admin</div>
         <button class="admin-close btn" id="adminClose" aria-label="Close">Close</button>
       </div>
-      <div class="admin-tabs">
+      <div class="admin-auth hidden" id="adminAuth">
+        <div class="admin-auth-card">
+          <div class="admin-auth-title">Admin Login</div>
+          <form class="admin-form full" id="adminAuthForm">
+            <div class="admin-field">
+              <label>Username</label>
+              <input id="adminUser" type="text" autocomplete="username" required/>
+            </div>
+            <div class="admin-field">
+              <label>Password</label>
+              <input id="adminPass" type="password" autocomplete="current-password" required/>
+            </div>
+            <div class="admin-actions">
+              <button class="admin-action" type="submit">Login</button>
+            </div>
+            <div class="admin-note" id="adminAuthError"></div>
+          </form>
+        </div>
+      </div>
+      <div class="admin-tabs" id="adminTabs">
         <button class="admin-tab active" data-tab="cameras">Cameras</button>
         <button class="admin-tab" data-tab="profiles">Slideshows</button>
       </div>
-      <div class="admin-body">
+      <div class="admin-body" id="adminBody">
         <section class="admin-section" id="adminCameras"></section>
         <section class="admin-section hidden" id="adminProfiles"></section>
       </div>

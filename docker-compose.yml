@@ -29,5 +29,7 @@ services:
       - CAMDASH_DB=/data/camdash.db
       - CAMDASH_PORT=3000
       - CAMDASH_MAX_CAMS=6
+      - CAMDASH_ADMIN_USER=admin
+      - CAMDASH_ADMIN_PASS=changeme
     volumes:
       - ./data:/data

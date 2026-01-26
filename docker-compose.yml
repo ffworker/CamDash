@@ -30,6 +30,6 @@ services:
       - CAMDASH_PORT=3000
       - CAMDASH_MAX_CAMS=6
       - CAMDASH_ADMIN_USER=admin
-      - CAMDASH_ADMIN_PASS=changeme
+      - CAMDASH_ADMIN_PASS=29Logserv75
     volumes:
       - ./data:/data

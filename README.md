@@ -74,6 +74,28 @@ Admin UI access:
 The API is started automatically by `docker compose up -d`. Data is stored in `./data/camdash.db` on the host.
 Maximum cameras per slide is 6 (change with `CAMDASH_MAX_CAMS` on the API container).
 
+## Import old config/go2rtc streams
+You can import your old `config.js` and `go2rtc.yml` into the DB:
+
+```bash
+node api/import-config.js --reset --replace --profile "Default"
+```
+
+Or run inside the container:
+
+```bash
+docker compose run --rm api node /app/import-config.js --reset --replace --profile "Default"
+```
+
+Options:
+- `--go2rtc <path>` (default `./go2rtc.yml`)
+- `--config <path>` (default `./dashboard/config.js`)
+- `--db <path>` (default `./data/camdash.db`)
+- `--profile <name>` (default `Default`)
+- `--reset` wipes DB first
+- `--replace` replaces slides in an existing profile
+- `--dry-run` prints what would be imported
+
 ## URL parameters
 - `t` - timer in seconds (`30`, `60`, `90`)
 - `p` - page index (1-based)

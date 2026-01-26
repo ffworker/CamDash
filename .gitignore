@@ -1,6 +1,8 @@
 ## Custom
 
 go2rtc.yml
+data/
+*.db
 
 
 ## Ignore Visual Studio temporary files, build results, and

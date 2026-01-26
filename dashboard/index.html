@@ -1,51 +1,77 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="de">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="theme-color" content="#0b0f14"/>
   <title>CamDash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
   <div class="topbar-hotspot" aria-hidden="true"></div>
-  <header class="topbar">
+  <header class="topbar" role="banner">
     <div class="brand">
       <div class="dot"></div>
       <div class="brandText">
-        <div class="title">CamDash</div>
-        <div class="subtitle" id="subtitle">Live</div>
+        <div class="title" id="brandTitle">CamDash</div>
+        <div class="subtitle" id="subtitle" aria-live="polite">Live</div>
       </div>
     </div>
 
-    <div class="stats">
-      <button class="chip btn" id="prevBtn" title="Vorherige Seite">
-        <span class="k">‹</span><span class="v">Prev</span>
+    <div class="stats" role="toolbar" aria-label="Steuerung">
+      <button class="chip btn" id="prevBtn" title="Vorherige Seite" aria-label="Vorherige Seite">
+        <span class="k">‹</span><span class="v" id="prevLabel">Prev</span>
       </button>
 
-      <button class="chip btn" id="nextBtn" title="Nächste Seite">
-        <span class="k">›</span><span class="v">Next</span>
+      <button class="chip btn" id="nextBtn" title="Nächste Seite" aria-label="Nächste Seite">
+        <span class="k">›</span><span class="v" id="nextLabel">Next</span>
       </button>
 
-      <div class="chip">
-        <span class="k">Timer</span>
+      <div class="chip" id="timerChip">
+        <span class="k" id="timerLabel">Timer</span>
         <span class="v" id="timerValue">60s</span>
       </div>
 
-      <div class="chip chipSelect" title="Auto-Wechsel Intervall">
-        <button class="seg" data-t="30">30</button>
-        <button class="seg" data-t="60">60</button>
-        <button class="seg" data-t="90">90</button>
+      <div class="chip chipSelect" id="timerSelect" title="Auto-Wechsel Intervall">
+        <button class="seg" data-t="30" aria-label="30 Sekunden">30</button>
+        <button class="seg" data-t="60" aria-label="60 Sekunden">60</button>
+        <button class="seg" data-t="90" aria-label="90 Sekunden">90</button>
         <span class="suffix">s</span>
       </div>
 
-      <div class="chip"><span class="k">Seite</span><span class="v" id="pageValue">1/1</span></div>
-      <div class="chip"><span class="k">Stand</span><span class="v" id="clock">--:--:--</span></div>
+      <div class="chip" id="pageChip"><span class="k" id="pageLabel">Seite</span><span class="v" id="pageValue">1/1</span></div>
+      <div class="chip" id="clockChip"><span class="k" id="clockLabel">Stand</span><span class="v" id="clock">--:--:--</span></div>
+      <button class="chip btn admin-btn hidden" id="adminBtn" title="Admin" aria-label="Admin">⚙</button>
     </div>
   </header>
 
-  <main class="wrap">
+  <main class="wrap" role="main">
     <section class="grid" id="grid"></section>
   </main>
+
+  <noscript>
+    <div class="noscript">Bitte JavaScript aktivieren, um CamDash zu nutzen.</div>
+  </noscript>
+
+  <div class="admin-overlay hidden" id="adminOverlay" aria-hidden="true">
+    <div class="admin-panel" role="dialog" aria-modal="true" aria-label="CamDash Admin">
+      <div class="admin-header">
+        <div class="admin-title">CamDash Admin</div>
+        <button class="admin-close btn" id="adminClose" aria-label="Close">Close</button>
+      </div>
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-tab="cameras">Cameras</button>
+        <button class="admin-tab" data-tab="profiles">Slideshows</button>
+      </div>
+      <div class="admin-body">
+        <section class="admin-section" id="adminCameras"></section>
+        <section class="admin-section hidden" id="adminProfiles"></section>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script src="config.js"></script>

@@ -106,7 +106,7 @@ The admin UI and API are not authenticated by default. If exposed outside a trus
 
 ## Other docs
 - German readme: `README.de.md`
-- Kiosk quick-starter: `quick-starter.md`
+- Kiosk setup: `kiosk-setup.md`
 
 ## License
 MIT. See `LICENSE`.

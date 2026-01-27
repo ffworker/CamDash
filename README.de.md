@@ -43,5 +43,4 @@ node api/import-config.js --reset --replace --profile "Default"
 
 ## Weitere Dokumente
 - English default: `README.md`
-- Kiosk‑Quick‑Starter: `quick-starter.md`
-
+- Kiosk‑Setup: `kiosk-setup.md`

@@ -103,6 +103,7 @@
   let hlsInstances = [];
   let cleanupFns = [];
   let cycleHandle = null;
+  let pagesSignature = "";
 
   init().catch((err) => {
     console.error("CamDash init failed", err);
@@ -129,7 +130,7 @@
     setTimerUi(seconds);
     updateUrlState();
     render();
-    scheduleCycle();
+    scheduleCycle(true);
     scheduleRemoteRefresh();
 
     document.addEventListener("visibilitychange", () => {
@@ -257,16 +258,24 @@
   function setRemoteState(state, initial) {
     dataState = state;
     maxCamsPerSlide = toInt(state?.maxCamsPerSlide, 6) || 6;
-    pages = buildPagesFromState(state);
-
-    if (!pages.length) {
-      pages = normalizeLocalPages(config.pages);
+    let nextPages = buildPagesFromState(state);
+    if (!nextPages.length) {
+      nextPages = normalizeLocalPages(config.pages);
     }
 
+    const nextSignature = JSON.stringify(nextPages);
+    const pagesChanged = nextSignature !== pagesSignature;
+    pages = nextPages;
+    pagesSignature = nextSignature;
+
     if (!initial) {
-      pageIndex = clampPageIndex(pageIndex);
-      updateUrlState();
-      render();
+      const nextIndex = clampPageIndex(pageIndex);
+      const pageIndexChanged = nextIndex !== pageIndex;
+      pageIndex = nextIndex;
+      if (pagesChanged || pageIndexChanged) {
+        updateUrlState();
+        render();
+      }
       scheduleCycle();
     }
   }
@@ -1095,7 +1104,7 @@
     setTimerUi(seconds);
     saveLocal(STORAGE.timer, seconds);
     updateUrlState();
-    scheduleCycle();
+    scheduleCycle(true);
   }
 
   function setPage(index) {
@@ -1330,9 +1339,14 @@
     if (dom.grid) dom.grid.innerHTML = "";
   }
 
-  function scheduleCycle() {
+  function scheduleCycle(force = false) {
+    if (!config.autoCycle || pages.length <= 1) {
+      stopCycle();
+      return;
+    }
+
+    if (cycleHandle && !force) return;
     stopCycle();
-    if (!config.autoCycle || pages.length <= 1) return;
 
     cycleHandle = setInterval(() => {
       pageIndex = (pageIndex + 1) % pages.length;

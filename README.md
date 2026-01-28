@@ -102,7 +102,7 @@ If you use go2rtc, define streams in `go2rtc.yml` and reference the stream ID in
 - HLS unsupported: ensure Hls.js loads or use Safari/native HLS.
 
 ## Security note
-The admin UI and API are not authenticated by default. If exposed outside a trusted network, add authentication or restrict access at the network/proxy level.
+Auth is disabled unless `CAMDASH_ADMIN_USER` and `CAMDASH_ADMIN_PASS` are set. The Docker Compose defaults set them, so change those values before exposing CamDash outside a trusted network.
 
 ## Other docs
 - German readme: `README.de.md`

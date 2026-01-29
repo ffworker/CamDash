@@ -69,10 +69,14 @@
 
   // Hls.js tuning (optional overrides)
   hls: {
-    liveSyncDurationCount: 3,
-    maxLiveSyncPlaybackRate: 1.0,
-    maxBufferLength: 8,
-    maxMaxBufferLength: 16,
+    // Low-latency, light buffer for faster start/pop-out
+    lowLatencyMode: true,
+    liveSyncDuration: 2,
+    liveSyncDurationCount: 2,
+    maxLiveSyncPlaybackRate: 1.5,
+    maxBufferLength: 4,
+    backBufferLength: 6,
+    maxMaxBufferLength: 8,
     enableWorker: true,
   },
 

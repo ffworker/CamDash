@@ -134,6 +134,7 @@
   let wallMode = false;
   let snapshotTimer = null;
   let liveHls = null;
+  let livePc = null;
   let isAuthed = false;
 
   init().catch((err) => {
@@ -1548,6 +1549,40 @@
     return `${base}/api/frame.jpeg?${qs}`;
   }
 
+  async function startWebRtc(video, streamId) {
+    const base = config.go2rtcBase || "";
+    const pc = new RTCPeerConnection();
+    livePc = pc;
+
+    pc.addTransceiver("video", { direction: "recvonly" });
+    pc.ontrack = (ev) => {
+      if (ev.streams && ev.streams[0]) {
+        video.srcObject = ev.streams[0];
+        video.play().catch(() => {});
+        dom.liveState.textContent = "live (WebRTC)";
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        dom.liveState.textContent = "webrtc error";
+      }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const res = await fetch(`${base}/api/webrtc?src=${encodeURIComponent(streamId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/sdp" },
+      body: offer.sdp,
+    });
+    if (!res.ok) throw new Error("webrtc signaling failed");
+    const answer = await res.text();
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answer }));
+    return true;
+  }
+
   function startSnapshotRefresh() {
     if (snapshotTimer) clearInterval(snapshotTimer);
     refreshSnapshots();
@@ -1568,7 +1603,7 @@
     });
   }
 
-  function openLive(cam) {
+  async function openLive(cam) {
     if (!dom.wallOverlay || !dom.liveVideo) return;
     dom.liveName.textContent = cam.name || cam.source;
     dom.liveState.textContent = "loading…";
@@ -1581,11 +1616,26 @@
     video.autoplay = true;
     const src = hlsUrl(cam.source || cam.id);
 
-    const HLS = window.Hls;
     if (liveHls) {
       try { liveHls.destroy(); } catch (_) {}
       liveHls = null;
     }
+    if (livePc) {
+      try { livePc.getSenders().forEach((s) => s.track && s.track.stop()); } catch (_) {}
+      try { livePc.close(); } catch (_) {}
+      livePc = null;
+    }
+
+    let played = false;
+    try {
+      played = await startWebRtc(video, cam.source || cam.id);
+    } catch (_) {
+      played = false;
+    }
+
+    if (played) return;
+
+    const HLS = window.Hls;
 
     if (HLS && HLS.isSupported()) {
       const hls = new HLS(config.hls);
@@ -1624,6 +1674,11 @@
     if (liveHls) {
       try { liveHls.destroy(); } catch (_) {}
       liveHls = null;
+    }
+    if (livePc) {
+      try { livePc.getSenders().forEach((s) => s.track && s.track.stop()); } catch (_) {}
+      try { livePc.close(); } catch (_) {}
+      livePc = null;
     }
     if (!silent) {
       // keep overlay hidden

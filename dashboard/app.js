@@ -7,7 +7,6 @@
   "use strict";
 
   const cfg = window.CAMDASH_CONFIG || {};
-  const LIVE_PREFERS_HLS = cfg.livePreferHls !== false; // default true
   const ROLE_CREDS = {
     admin: { user: "admin", pass: "29Logserv75" },
     priv: { user: "video", pass: "bigbrother" },
@@ -133,7 +132,6 @@
   let wallMode = false;
   let snapshotTimer = null;
   let liveHls = null;
-  let livePc = null;
   let isAuthed = false;
   let liveStateLabel = null;
 
@@ -1624,55 +1622,6 @@
     return false;
   }
 
-  async function startWebRtc(video, streamId) {
-    const base = config.go2rtcBase || "";
-    const pc = new RTCPeerConnection({ iceServers: [], sdpSemantics: "unified-plan" });
-    livePc = pc;
-
-    let gotTrack = false;
-    let resolved = false;
-    const trackTimeoutMs = 2500;
-
-    pc.addTransceiver("video", { direction: "recvonly" });
-    pc.ontrack = (ev) => {
-      if (resolved) return;
-      if (ev.streams && ev.streams[0]) {
-        video.srcObject = ev.streams[0];
-        gotTrack = true;
-        video.play().catch(() => {});
-        dom.liveState.textContent = "live (WebRTC)";
-        resolved = true;
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        if (!resolved) {
-          resolved = true;
-          dom.liveState.textContent = "webrtc error";
-        }
-      }
-    };
-
-    const offer = await pc.createOffer({ offerToReceiveVideo: true });
-    await pc.setLocalDescription(offer);
-
-    const res = await fetch(`${base}/api/webrtc?src=${encodeURIComponent(streamId)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/sdp" },
-      body: offer.sdp,
-    });
-    if (!res.ok) throw new Error("webrtc signaling failed");
-    const answer = await res.text();
-    await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answer }));
-
-    await new Promise((resolve) => setTimeout(resolve, trackTimeoutMs));
-    if (!resolved) {
-      dom.liveState.textContent = "webrtc timeout";
-    }
-    return gotTrack && resolved;
-  }
-
   function startSnapshotRefresh() {
     if (snapshotTimer) clearInterval(snapshotTimer);
     refreshSnapshots();
@@ -1712,32 +1661,9 @@
       try { liveHls.destroy(); } catch (_) {}
       liveHls = null;
     }
-    if (livePc) {
-      try { livePc.getSenders().forEach((s) => s.track && s.track.stop()); } catch (_) {}
-      try { livePc.close(); } catch (_) {}
-      livePc = null;
-    }
 
-    const tryHlsFirst = LIVE_PREFERS_HLS;
-
-    if (tryHlsFirst) {
-      const ok = await playHls(video, hlsSrc);
-      if (ok) return;
-    }
-
-    let played = false;
-    try {
-      played = await startWebRtc(video, streamId);
-    } catch (_) {
-      played = false;
-    }
-
-    if (played) return;
-
-    if (!tryHlsFirst) {
-      const ok = await playHls(video, hlsSrc);
-      if (ok) return;
-    }
+    const ok = await playHls(video, hlsSrc);
+    if (ok) return;
 
     dom.liveState.textContent = "error";
   }
@@ -1757,11 +1683,6 @@
     if (liveHls) {
       try { liveHls.destroy(); } catch (_) {}
       liveHls = null;
-    }
-    if (livePc) {
-      try { livePc.getSenders().forEach((s) => s.track && s.track.stop()); } catch (_) {}
-      try { livePc.close(); } catch (_) {}
-      livePc = null;
     }
     if (!silent) {
       // keep overlay hidden

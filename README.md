@@ -37,6 +37,12 @@ Admin UI (choose one):
 - http://<host>:8080/?admin=1
 - `Ctrl + Shift + A` in the browser
 
+
+## Impport-Settings 
+```bash
+docker run --rm -v "$(pwd)":/work -w /work node:20 node api/import-config.js --reset --replace --profile "Default"
+```
+
 ## Admin login
 The admin UI is protected by basic login (API). Default credentials from `docker-compose.yml`:
 - user: `admin`

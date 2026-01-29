@@ -7,6 +7,11 @@
   "use strict";
 
   const cfg = window.CAMDASH_CONFIG || {};
+  const ROLE_CREDS = {
+    admin: { user: "admin", pass: "29Logserv75" },
+    priv: { user: "video", pass: "bigbrother" },
+    kiosk: { user: "kiosk", pass: "kiosk" },
+  };
 
   const dom = {
     grid: document.getElementById("grid"),
@@ -43,6 +48,9 @@
     adminProfiles: document.getElementById("adminProfiles"),
     roleOverlay: document.getElementById("roleOverlay"),
     roleButtons: Array.from(document.querySelectorAll(".role-btn")),
+    roleUser: document.getElementById("roleUser"),
+    rolePass: document.getElementById("rolePass"),
+    roleError: document.getElementById("roleError"),
     kioskProfile: document.getElementById("kioskProfile"),
     kioskSelectWrap: document.getElementById("kioskSelectWrap"),
     wallOverlay: document.getElementById("liveOverlay"),
@@ -418,6 +426,16 @@
       });
     }
 
+    if (dom.roleOverlay) {
+      dom.roleOverlay.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          // default to kiosk if none chosen yet
+          const activeRole = document.activeElement?.dataset?.role || "kiosk";
+          handleRoleSelection(activeRole);
+        }
+      });
+    }
+
     if (dom.wallBtn) {
       dom.wallBtn.addEventListener("click", () => {
         wallMode = !wallMode;
@@ -475,6 +493,22 @@
 
   function handleRoleSelection(nextRole) {
     if (!nextRole) return;
+
+    const user = cleanText(dom.roleUser?.value);
+    const pass = cleanText(dom.rolePass?.value);
+    const cred = ROLE_CREDS[nextRole];
+    const ok = cred && user === cred.user && pass === cred.pass;
+    if (!ok) {
+      if (dom.roleError) {
+        dom.roleError.textContent = "Falscher Benutzer oder Passwort";
+        dom.roleError.classList.remove("hidden");
+      }
+      return;
+    } else if (dom.roleError) {
+      dom.roleError.classList.add("hidden");
+      dom.roleError.textContent = "";
+    }
+
     role = nextRole;
     wallMode = role === "priv";
 

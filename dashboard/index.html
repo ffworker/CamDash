@@ -96,6 +96,12 @@
   <div class="role-overlay hidden" id="roleOverlay" aria-hidden="true">
     <div class="role-card">
       <div class="role-title">Anmelden</div>
+      <div class="role-auth">
+        <label>Benutzer</label>
+        <input id="roleUser" type="text" autocomplete="username" placeholder="user"/>
+        <label>Passwort</label>
+        <input id="rolePass" type="password" autocomplete="current-password" placeholder="pass"/>
+      </div>
       <div class="role-options">
         <button class="role-btn" data-role="kiosk">Kiosk</button>
         <button class="role-btn" data-role="priv">Übersicht</button>
@@ -105,6 +111,7 @@
         <label for="kioskProfile">Slideshow</label>
         <select id="kioskProfile"></select>
       </div>
+      <div class="role-error hidden" id="roleError"></div>
       <div class="role-note">Kiosk: feste Slideshow · Übersicht: alle Cams als Snapshots · Admin: volle Kontrolle</div>
     </div>
   </div>

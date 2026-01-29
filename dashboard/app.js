@@ -1587,7 +1587,7 @@
         hls.loadSource(src);
         hls.attachMedia(video);
 
-        setTimeout(() => finish(false), 2500);
+        setTimeout(() => finish(false), 6000);
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       return await new Promise((resolve) => {
@@ -1615,7 +1615,7 @@
           { once: true }
         );
         video.play().catch(() => {});
-        setTimeout(() => finish(false), 2500);
+        setTimeout(() => finish(false), 6000);
       });
     }
     dom.liveState.textContent = "HLS unsupported";

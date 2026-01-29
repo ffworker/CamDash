@@ -69,14 +69,12 @@
 
   // Hls.js tuning (optional overrides)
   hls: {
-    // Low-latency, light buffer for faster start/pop-out
-    lowLatencyMode: true,
-    liveSyncDuration: 2,
-    liveSyncDurationCount: 2,
-    maxLiveSyncPlaybackRate: 1.5,
-    maxBufferLength: 4,
-    backBufferLength: 6,
-    maxMaxBufferLength: 8,
+    // Stable defaults for go2rtc HLS
+    liveSyncDurationCount: 3,
+    maxLiveSyncPlaybackRate: 1.25,
+    maxBufferLength: 12,
+    backBufferLength: 30,
+    maxMaxBufferLength: 20,
     enableWorker: true,
   },
 

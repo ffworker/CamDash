@@ -70,7 +70,7 @@
       refreshSeconds: 20,
     },
     snapwall: {
-      refreshSeconds: 12,
+      refreshSeconds: 17, // slightly slower to reduce load
       width: 480,
       height: 270,
     },
@@ -371,12 +371,14 @@
   function initControls() {
     if (dom.prevBtn) {
       dom.prevBtn.addEventListener("click", () => {
+        if (role !== "admin") return;
         setPage(pageIndex - 1);
       });
     }
 
     if (dom.nextBtn) {
       dom.nextBtn.addEventListener("click", () => {
+        if (role !== "admin") return;
         setPage(pageIndex + 1);
       });
     }
@@ -397,11 +399,11 @@
         return;
       }
 
-      if (e.key === "ArrowLeft") {
+      if (role === "admin" && e.key === "ArrowLeft") {
         setPage(pageIndex - 1);
-      } else if (e.key === "ArrowRight") {
+      } else if (role === "admin" && e.key === "ArrowRight") {
         setPage(pageIndex + 1);
-      } else if (config.autoCycle) {
+      } else if (config.autoCycle && role === "admin") {
         if (e.key === "1") setTimer(30);
         if (e.key === "2") setTimer(60);
         if (e.key === "3") setTimer(90);
@@ -554,11 +556,11 @@
     const showWall = role === "priv" || role === "admin";
     setVisible(dom.wallBtn, showWall);
 
-    const showNav = config.ui.showNav && role !== "kiosk";
+    const showNav = config.ui.showNav && role === "admin";
     setVisible(dom.prevBtn, showNav);
     setVisible(dom.nextBtn, showNav);
 
-    const showTimer = config.ui.showTimer && config.autoCycle && role !== "kiosk";
+    const showTimer = config.ui.showTimer && config.autoCycle && role === "admin";
     setVisible(dom.timerChip, showTimer);
     setVisible(dom.timerSelect, showTimer);
 
@@ -1575,6 +1577,8 @@
 
     const video = dom.liveVideo;
     video.src = "";
+    video.muted = true;
+    video.autoplay = true;
     const src = hlsUrl(cam.source || cam.id);
 
     const HLS = window.Hls;
@@ -1595,10 +1599,12 @@
       hls.loadSource(src);
       hls.attachMedia(video);
       liveHls = hls;
+      setTimeout(() => video.play().catch(() => {}), 50);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
       video.addEventListener("playing", () => (dom.liveState.textContent = "live"), { once: true });
       video.addEventListener("error", () => (dom.liveState.textContent = "error"), { once: true });
+      video.play().catch(() => {});
     } else {
       dom.liveState.textContent = "HLS unsupported";
     }

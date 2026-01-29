@@ -7,6 +7,7 @@
   "use strict";
 
   const cfg = window.CAMDASH_CONFIG || {};
+  const FORCE_H264 = true; // force go2rtc to transcode to H.264 for browser compatibility
   const ROLE_CREDS = {
     admin: { user: "admin", pass: "29Logserv75" },
     priv: { user: "video", pass: "bigbrother" },
@@ -1542,12 +1543,14 @@
   }
   function hlsUrl(streamId) {
     const base = config.go2rtcBase;
-    return `${base}/api/stream.m3u8?src=${encodeURIComponent(streamId)}`;
+    const id = FORCE_H264 ? `${streamId}#video=h264` : streamId;
+    return `${base}/api/stream.m3u8?src=${encodeURIComponent(id)}`;
   }
 
   function snapshotUrl(streamId) {
     const base = config.go2rtcBase;
-    const qs = `src=${encodeURIComponent(streamId)}&w=${config.snapwall.width}&h=${config.snapwall.height}&_=${Date.now()}`;
+    const id = FORCE_H264 ? `${streamId}#video=h264` : streamId;
+    const qs = `src=${encodeURIComponent(id)}&w=${config.snapwall.width}&h=${config.snapwall.height}&_=${Date.now()}`;
     return `${base}/api/frame.jpeg?${qs}`;
   }
 

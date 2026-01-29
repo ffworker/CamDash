@@ -16,7 +16,7 @@ sudo nano /home/logserv/.config/autostart/CamDash.desktop
 [Desktop Entry]
 Type=Application
 Name=CamDash
-Exec=firefox --kiosk http://<host>:8080/
+Exec=firefox --kiosk http://172.17.1.56:8080/
 X-GNOME-Autostart-enabled=true
 NoDisplay=false
 Hidden=false
@@ -24,15 +24,6 @@ Terminal=false
 ```
 
 Note: Replace the URL with your CamDash address.
-
-Optional: Pin a specific slideshow on this kiosk by adding a profile query param (`profile` or `profileId`), e.g.
-
-```
-Exec=firefox --kiosk http://<host>:8080/?profileId=<id>
-```
-
-If you omit the profile param, CamDash uses the active profile from the admin UI, so URLs like
-`http://<host>:8080/` keep working.
 
 ## 3 Edit GNOME variables
 

@@ -7,6 +7,7 @@
   "use strict";
 
   const cfg = window.CAMDASH_CONFIG || {};
+  const LIVE_PREFERS_HLS = cfg.livePreferHls !== false; // default true
   const ROLE_CREDS = {
     admin: { user: "admin", pass: "29Logserv75" },
     priv: { user: "video", pass: "bigbrother" },
@@ -47,12 +48,10 @@
     adminCameras: document.getElementById("adminCameras"),
     adminProfiles: document.getElementById("adminProfiles"),
     roleOverlay: document.getElementById("roleOverlay"),
-    roleButtons: Array.from(document.querySelectorAll(".role-btn")),
+    roleForm: document.getElementById("roleForm"),
     roleUser: document.getElementById("roleUser"),
     rolePass: document.getElementById("rolePass"),
     roleError: document.getElementById("roleError"),
-    kioskProfile: document.getElementById("kioskProfile"),
-    kioskSelectWrap: document.getElementById("kioskSelectWrap"),
     wallOverlay: document.getElementById("liveOverlay"),
     wallClose: document.getElementById("liveClose"),
     liveVideo: document.getElementById("liveVideo"),
@@ -136,6 +135,7 @@
   let liveHls = null;
   let livePc = null;
   let isAuthed = false;
+  let liveStateLabel = null;
 
   init().catch((err) => {
     console.error("CamDash init failed", err);
@@ -325,10 +325,18 @@
   function buildPagesFromState(state) {
     const profiles = Array.isArray(state?.profiles) ? state.profiles : [];
     const cameras = Array.isArray(state?.cameras) ? state.cameras : [];
-    const overrideId = roleProfileId || resolveProfileOverride(profiles);
-    const activeProfileId = overrideId || state?.activeProfileId;
-    const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0];
 
+    let chosenProfileId = state?.activeProfileId;
+    if (role === "admin") {
+      const overrideId = roleProfileId || resolveProfileOverride(profiles);
+      chosenProfileId = overrideId || chosenProfileId;
+    } else if (role === "kiosk" && roleProfileId) {
+      chosenProfileId = roleProfileId;
+    } else if (role === "priv") {
+      // no manual override for priv; stick to active profile
+    }
+
+    const activeProfile = profiles.find((profile) => profile.id === chosenProfileId) || profiles[0];
     if (!activeProfile) return [];
 
     const camMap = new Map(cameras.map((cam) => [cam.id, cam]));
@@ -415,25 +423,19 @@
   function initRoles() {
     if (!dom.roleOverlay) return;
 
-    fillKioskProfiles();
     toggleRoleOverlay(true);
 
-    dom.roleButtons.forEach((btn) => {
-      btn.addEventListener("click", () => handleRoleSelection(btn.dataset.role));
-    });
-
-    if (dom.kioskProfile) {
-      dom.kioskProfile.addEventListener("change", () => {
-        roleProfileId = dom.kioskProfile.value || "";
-        saveLocal(STORAGE.roleProfile, roleProfileId);
+    if (dom.roleForm) {
+      dom.roleForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        handleRoleAuth();
       });
     }
 
     if (dom.roleOverlay) {
       dom.roleOverlay.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
-          const activeRole = document.activeElement?.dataset?.role || "kiosk";
-          handleRoleSelection(activeRole);
+          handleRoleAuth();
         }
       });
     }
@@ -493,35 +495,35 @@
     }
   }
 
-  function handleRoleSelection(nextRole) {
-    if (!nextRole) return;
-
+  function handleRoleAuth() {
     const user = cleanText(dom.roleUser?.value);
     const pass = cleanText(dom.rolePass?.value);
-    const cred = ROLE_CREDS[nextRole];
-    const ok = cred && user === cred.user && pass === cred.pass;
-    if (!ok) {
+    if (!user || !pass) return;
+
+    let matchedRole = null;
+    Object.entries(ROLE_CREDS).forEach(([r, cred]) => {
+      if (user === cred.user && pass === cred.pass) matchedRole = r;
+    });
+
+    if (!matchedRole) {
       if (dom.roleError) {
         dom.roleError.textContent = "Falscher Benutzer oder Passwort";
         dom.roleError.classList.remove("hidden");
       }
       return;
-    } else if (dom.roleError) {
+    }
+    if (dom.roleError) {
       dom.roleError.classList.add("hidden");
       dom.roleError.textContent = "";
     }
 
-    role = nextRole;
-    wallMode = role === "priv";
+    role = matchedRole;
+    wallMode = role === "priv" || role === "admin";
     isAuthed = true;
 
-    if (role === "kiosk") {
-      if (dom.kioskProfile && dom.kioskProfile.value) {
-        roleProfileId = dom.kioskProfile.value;
-        saveLocal(STORAGE.roleProfile, roleProfileId);
-      } else if (dataState?.activeProfileId) {
-        roleProfileId = dataState.activeProfileId;
-      }
+    // Kiosk sticks to active profile; others use active, admin can switch via admin UI
+    if (role === "kiosk" && dataState?.activeProfileId) {
+      roleProfileId = dataState.activeProfileId;
     } else if (role !== "kiosk") {
       roleProfileId = "";
     }
@@ -544,8 +546,10 @@
       setVisible(dom.nextBtn, false);
       setVisible(dom.timerChip, false);
       setVisible(dom.timerSelect, false);
+      document.body.classList.add("locked");
       return;
     }
+    document.body.classList.remove("locked");
 
     document.body.classList.toggle("role-kiosk", role === "kiosk");
     document.body.classList.toggle("role-priv", role === "priv");
@@ -557,11 +561,11 @@
     const showWall = role === "priv" || role === "admin";
     setVisible(dom.wallBtn, showWall);
 
-    const showNav = config.ui.showNav && role === "admin";
+    const showNav = config.ui.showNav && (role === "admin" || role === "priv");
     setVisible(dom.prevBtn, showNav);
     setVisible(dom.nextBtn, showNav);
 
-    const showTimer = config.ui.showTimer && config.autoCycle && role === "admin";
+    const showTimer = config.ui.showTimer && config.autoCycle && (role === "admin" || role === "priv");
     setVisible(dom.timerChip, showTimer);
     setVisible(dom.timerSelect, showTimer);
 
@@ -1549,27 +1553,104 @@
     return `${base}/api/frame.jpeg?${qs}`;
   }
 
+  async function playHls(video, src) {
+    const HLS = window.Hls;
+    if (liveHls) {
+      try { liveHls.destroy(); } catch (_) {}
+      liveHls = null;
+    }
+
+    if (HLS && HLS.isSupported()) {
+      return await new Promise((resolve) => {
+        const hls = new HLS(config.hls);
+        liveHls = hls;
+        let settled = false;
+
+        const finish = (ok) => {
+          if (settled) return;
+          settled = true;
+          resolve(ok);
+        };
+
+        hls.on(HLS.Events.MANIFEST_PARSED, () => {
+          dom.liveState.textContent = "live (HLS)";
+          setTimeout(() => video.play().catch(() => {}), 30);
+          finish(true);
+        });
+        hls.on(HLS.Events.ERROR, (_evt, data) => {
+          if (data?.fatal) {
+            dom.liveState.textContent = "hls error";
+            try { hls.destroy(); } catch (_) {}
+            liveHls = null;
+            finish(false);
+          }
+        });
+
+        hls.loadSource(src);
+        hls.attachMedia(video);
+
+        setTimeout(() => finish(false), 2500);
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      return await new Promise((resolve) => {
+        let settled = false;
+        const finish = (ok) => {
+          if (settled) return;
+          settled = true;
+          resolve(ok);
+        };
+        video.src = src;
+        video.addEventListener(
+          "playing",
+          () => {
+            dom.liveState.textContent = "live (HLS)";
+            finish(true);
+          },
+          { once: true }
+        );
+        video.addEventListener(
+          "error",
+          () => {
+            dom.liveState.textContent = "hls error";
+            finish(false);
+          },
+          { once: true }
+        );
+        video.play().catch(() => {});
+        setTimeout(() => finish(false), 2500);
+      });
+    }
+    dom.liveState.textContent = "HLS unsupported";
+    return false;
+  }
+
   async function startWebRtc(video, streamId) {
     const base = config.go2rtcBase || "";
     const pc = new RTCPeerConnection({ iceServers: [], sdpSemantics: "unified-plan" });
     livePc = pc;
 
     let gotTrack = false;
+    let resolved = false;
     const trackTimeoutMs = 2500;
 
     pc.addTransceiver("video", { direction: "recvonly" });
     pc.ontrack = (ev) => {
+      if (resolved) return;
       if (ev.streams && ev.streams[0]) {
         video.srcObject = ev.streams[0];
         gotTrack = true;
         video.play().catch(() => {});
         dom.liveState.textContent = "live (WebRTC)";
+        resolved = true;
       }
     };
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        dom.liveState.textContent = "webrtc error";
+        if (!resolved) {
+          resolved = true;
+          dom.liveState.textContent = "webrtc error";
+        }
       }
     };
 
@@ -1586,7 +1667,10 @@
     await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answer }));
 
     await new Promise((resolve) => setTimeout(resolve, trackTimeoutMs));
-    return gotTrack;
+    if (!resolved) {
+      dom.liveState.textContent = "webrtc timeout";
+    }
+    return gotTrack && resolved;
   }
 
   function startSnapshotRefresh() {
@@ -1613,6 +1697,7 @@
     if (!dom.wallOverlay || !dom.liveVideo) return;
     dom.liveName.textContent = cam.name || cam.source;
     dom.liveState.textContent = "loading…";
+    liveStateLabel = dom.liveState;
     dom.wallOverlay.classList.remove("hidden");
     dom.wallOverlay.setAttribute("aria-hidden", "false");
 
@@ -1620,7 +1705,8 @@
     video.src = "";
     video.muted = true;
     video.autoplay = true;
-    const src = hlsUrl(cam.source || cam.id);
+    const streamId = cam.source || cam.id;
+    const hlsSrc = hlsUrl(streamId);
 
     if (liveHls) {
       try { liveHls.destroy(); } catch (_) {}
@@ -1632,44 +1718,35 @@
       livePc = null;
     }
 
+    const tryHlsFirst = LIVE_PREFERS_HLS;
+
+    if (tryHlsFirst) {
+      const ok = await playHls(video, hlsSrc);
+      if (ok) return;
+    }
+
     let played = false;
     try {
-      played = await startWebRtc(video, cam.source || cam.id);
+      played = await startWebRtc(video, streamId);
     } catch (_) {
       played = false;
     }
 
     if (played) return;
 
-    const HLS = window.Hls;
-
-    if (HLS && HLS.isSupported()) {
-      const hls = new HLS(config.hls);
-      hls.on(HLS.Events.MANIFEST_PARSED, () => (dom.liveState.textContent = "live"));
-      hls.on(HLS.Events.ERROR, (_evt, data) => {
-        if (data?.fatal) {
-          dom.liveState.textContent = "error";
-          try { hls.destroy(); } catch (_) {}
-        }
-      });
-      hls.loadSource(src);
-      hls.attachMedia(video);
-      liveHls = hls;
-      setTimeout(() => video.play().catch(() => {}), 50);
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = src;
-      video.addEventListener("playing", () => (dom.liveState.textContent = "live"), { once: true });
-      video.addEventListener("error", () => (dom.liveState.textContent = "error"), { once: true });
-      video.play().catch(() => {});
-    } else {
-      dom.liveState.textContent = "HLS unsupported";
+    if (!tryHlsFirst) {
+      const ok = await playHls(video, hlsSrc);
+      if (ok) return;
     }
+
+    dom.liveState.textContent = "error";
   }
 
   function closeLive(silent) {
     if (!dom.wallOverlay) return;
     dom.wallOverlay.classList.add("hidden");
     dom.wallOverlay.setAttribute("aria-hidden", "true");
+    liveStateLabel = null;
     if (dom.liveVideo) {
       try {
         dom.liveVideo.pause();

@@ -96,23 +96,15 @@
   <div class="role-overlay hidden" id="roleOverlay" aria-hidden="true">
     <div class="role-card">
       <div class="role-title">Anmelden</div>
-      <div class="role-auth">
-        <label>Benutzer</label>
-        <input id="roleUser" type="text" autocomplete="username" placeholder="user"/>
-        <label>Passwort</label>
-        <input id="rolePass" type="password" autocomplete="current-password" placeholder="pass"/>
-      </div>
-      <div class="role-options">
-        <button class="role-btn" data-role="kiosk">Kiosk</button>
-        <button class="role-btn" data-role="priv">Übersicht</button>
-        <button class="role-btn" data-role="admin">Admin</button>
-      </div>
-      <div class="role-kiosk-select hidden" id="kioskSelectWrap">
-        <label for="kioskProfile">Slideshow</label>
-        <select id="kioskProfile"></select>
-      </div>
+      <form id="roleForm" class="role-auth" autocomplete="on">
+        <label for="roleUser">Benutzer</label>
+        <input id="roleUser" name="user" type="text" autocomplete="username" placeholder="user" required/>
+        <label for="rolePass">Passwort</label>
+        <input id="rolePass" name="pass" type="password" autocomplete="current-password" placeholder="pass" required/>
+        <button class="role-btn primary" type="submit">Login</button>
+      </form>
       <div class="role-error hidden" id="roleError"></div>
-      <div class="role-note">Kiosk: feste Slideshow · Übersicht: alle Cams als Snapshots · Admin: volle Kontrolle</div>
+      <div class="role-note">Rollen: admin (alles), video (Übersicht + Slides), kiosk (nur Slides).</div>
     </div>
   </div>
 

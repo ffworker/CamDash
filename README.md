@@ -20,6 +20,11 @@ Prerequisites:
 - Docker + Docker Compose
 - (Optional) go2rtc running via the included compose service
 
+Create local config files:
+- Copy `.env.example` to `.env` and set your admin credentials
+- If you use go2rtc, copy `go2rtc-example.yml` to `go2rtc.yml` and edit streams
+- Optional: copy `dashboard/config.js` to `dashboard/config.local.js` for local overrides (ignored by git)
+
 Start everything:
 ```bash
 docker compose up -d --build
@@ -65,6 +70,8 @@ Key options:
 - `ui.*`: display toggles, labels, theme overrides
 - `hls.*`: Hls.js tuning
 - `pages`: local fallback pages (used only if `dataSource.mode = "local"`)
+
+`dashboard/config.local.js` is loaded after `config.js` (if present) and can override settings locally.
 
 ## Import existing config
 Import your current `dashboard/config.js` + `go2rtc.yml` into the DB:

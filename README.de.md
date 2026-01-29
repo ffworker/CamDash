@@ -7,6 +7,12 @@ Voraussetzungen:
 - Docker + Docker Compose
 - (Optional) go2rtc über das mitgelieferte Compose-Setup
 
+Lokale Dateien anlegen:
+- .env.example -> .env kopieren und Admin-Zugangsdaten setzen
+- Bei go2rtc: go2rtc-example.yml -> go2rtc.yml kopieren und Streams pflegen
+- Optional: dashboard/config.js -> dashboard/config.local.js (lokale Overrides, nicht im Repo)
+
+
 Start:
 ```bash
 docker compose up -d --build
@@ -20,11 +26,11 @@ Admin-UI öffnen:
 - oder `Strg + Shift + A` im Browser
 
 ## Admin-Login
-Standard-Zugangsdaten (aus `docker-compose.yml`):
+Standard-Zugangsdaten (aus `.env.example`):
 - Benutzer: `admin`
 - Passwort: `changeme`
 
-Ändern in `docker-compose.yml`:
+Ändern in `.env`:
 ```
 CAMDASH_ADMIN_USER=deinuser
 CAMDASH_ADMIN_PASS=deinpass
@@ -44,3 +50,4 @@ node api/import-config.js --reset --replace --profile "Default"
 ## Weitere Dokumente
 - English default: `README.md`
 - Kiosk-Setup: `kiosk-setup.md`
+

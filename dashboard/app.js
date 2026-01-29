@@ -1551,13 +1551,17 @@
 
   async function startWebRtc(video, streamId) {
     const base = config.go2rtcBase || "";
-    const pc = new RTCPeerConnection();
+    const pc = new RTCPeerConnection({ iceServers: [], sdpSemantics: "unified-plan" });
     livePc = pc;
+
+    let gotTrack = false;
+    const trackTimeoutMs = 2500;
 
     pc.addTransceiver("video", { direction: "recvonly" });
     pc.ontrack = (ev) => {
       if (ev.streams && ev.streams[0]) {
         video.srcObject = ev.streams[0];
+        gotTrack = true;
         video.play().catch(() => {});
         dom.liveState.textContent = "live (WebRTC)";
       }
@@ -1569,7 +1573,7 @@
       }
     };
 
-    const offer = await pc.createOffer();
+    const offer = await pc.createOffer({ offerToReceiveVideo: true });
     await pc.setLocalDescription(offer);
 
     const res = await fetch(`${base}/api/webrtc?src=${encodeURIComponent(streamId)}`, {
@@ -1580,7 +1584,9 @@
     if (!res.ok) throw new Error("webrtc signaling failed");
     const answer = await res.text();
     await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answer }));
-    return true;
+
+    await new Promise((resolve) => setTimeout(resolve, trackTimeoutMs));
+    return gotTrack;
   }
 
   function startSnapshotRefresh() {

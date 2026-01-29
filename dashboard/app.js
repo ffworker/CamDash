@@ -103,7 +103,6 @@
   const STORAGE = {
     timer: "camdash.timer",
     page: "camdash.page",
-    role: "camdash.role",
     roleProfile: "camdash.roleProfile",
   };
   const PROFILE_QUERY_KEYS = ["profile", "profileId"];
@@ -524,7 +523,6 @@
       roleProfileId = "";
     }
 
-    saveLocal(STORAGE.role, role);
     applyRoleUi();
     toggleRoleOverlay(false);
     render();
@@ -553,7 +551,7 @@
     const showAdmin = role === "admin" && config.ui.adminEnabled && config.dataSource.mode === "remote";
     setVisible(dom.adminBtn, showAdmin);
 
-    const showWall = role === "priv";
+    const showWall = role === "priv" || role === "admin";
     setVisible(dom.wallBtn, showWall);
 
     const showNav = config.ui.showNav && role !== "kiosk";

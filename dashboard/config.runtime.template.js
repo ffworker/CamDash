@@ -1,6 +1,5 @@
 (() => {
-  const override = {};
-  const go2rtcBase = "${CAMDASH_GO2RTC_BASE}";
-  if (go2rtcBase) override.go2rtcBase = go2rtcBase;
-  window.CAMDASH_CONFIG = { ...(window.CAMDASH_CONFIG || {}), ...override };
+  // Runtime override file now keeps go2rtcBase empty to rely on nginx /api proxy.
+  // If you ever need a direct URL, set window.CAMDASH_CONFIG.go2rtcBase manually.
+  window.CAMDASH_CONFIG = { ...(window.CAMDASH_CONFIG || {}), go2rtcBase: "" };
 })();

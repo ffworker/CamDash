@@ -35,7 +35,7 @@ services:
       - CAMDASH_IMPORT_GO2RTC=/config/go2rtc.yml
       - CAMDASH_IMPORT_CONFIG=/config/config.js
       - CAMDASH_IMPORT_PROFILE=Default
-      - CAMDASH_MAX_CAMS=6
+      - CAMDASH_MAX_CAMS=20
       - CAMDASH_ADMIN_USER=admin
       - CAMDASH_ADMIN_PASS=29Logserv75
     volumes:

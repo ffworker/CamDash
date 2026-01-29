@@ -37,6 +37,20 @@ Admin UI (choose one):
 - http://<host>:8080/?admin=1
 - `Ctrl + Shift + A` in the browser
 
+## Central config (docker-compose.yml)
+All runtime settings live in the `api` service `environment` block:
+- `CAMDASH_DB=/data/camdash.db`
+- `CAMDASH_PORT=3000`
+- `CAMDASH_IMPORT_GO2RTC=/config/go2rtc.yml`
+- `CAMDASH_IMPORT_CONFIG=/config/config.js`
+- `CAMDASH_IMPORT_PROFILE=Default`
+- `CAMDASH_MAX_CAMS=6`
+- `CAMDASH_ADMIN_USER=admin`
+- `CAMDASH_ADMIN_PASS=29Logserv75`
+- (optional) `CAMDASH_GO2RTC_HOST` / `CAMDASH_GO2RTC_PORT` to bypass the nginx `/api` proxy and talk to go2rtc directly.
+
+> No `.env` file is required; edit `docker-compose.yml` to change settings.
+
 
 ## Impport-Settings 
 ```bash
@@ -44,15 +58,11 @@ docker run --rm -v "$(pwd)":/work -w /work node:20 node api/import-config.js --r
 ```
 
 ## Admin login
-The admin UI is protected by basic login (API). Default credentials from `docker-compose.yml`:
+The admin UI is protected by basic login (API). Defaults (from `docker-compose.yml`):
 - user: `admin`
-- pass: `changeme`
+- pass: `29Logserv75`
 
-Change them in `docker-compose.yml`:
-```
-CAMDASH_ADMIN_USER=youruser
-CAMDASH_ADMIN_PASS=yourpass
-```
+Change them directly in `docker-compose.yml` (`CAMDASH_ADMIN_USER` / `CAMDASH_ADMIN_PASS`).
 
 ## Admin UI workflow
 1) Add cameras (name, location, source)
@@ -82,6 +92,8 @@ Container version:
 ```bash
 docker compose run --rm api node /app/import-config.js --reset --replace --profile "Default"
 ```
+
+> Note: No `.env` file is required; all runtime settings are defined in `docker-compose.yml`.
 
 ## Auto import on first run
 If `go2rtc.yml` exists and the DB is empty, the API will auto-import streams on startup. It also reads `dashboard/config.js` (if present) to keep camera names and slide groupings aligned with your config.
@@ -113,18 +125,16 @@ Options:
 If you use go2rtc, define streams in `go2rtc.yml` and reference the stream ID in the camera source (e.g., `einfahrt_2`).
 
 ## go2rtc host configuration
-The API will inject `window.CAMDASH_GO2RTC_HOST` and `window.CAMDASH_GO2RTC_PORT` into `dashboard/config.js` at request time. This lets the dashboard compute the correct go2rtc base URL without hard-coding an IP.
+Default (recommended): the dashboard uses the same-origin `/api` proxy handled by nginx, so browsers never need direct access to go2rtc.
 
-- Set the environment variables in the API container to point to your go2rtc instance:
-
-```yaml
-# in docker-compose.yml (api service)
-environment:
-	- CAMDASH_GO2RTC_HOST=host.docker.internal  # or the go2rtc hostname/IP
-	- CAMDASH_GO2RTC_PORT=1984
-```
-
-- If you don't set these, the client falls back to the page host (`window.location.hostname`).
+- Leave `CAMDASH_GO2RTC_HOST` and `CAMDASH_GO2RTC_PORT` **unset** to use the proxy.
+- If you want the dashboard to hit go2rtc directly (e.g., no nginx in front), set the env vars in the API container:
+  ```yaml
+  # in docker-compose.yml (api service)
+  environment:
+    - CAMDASH_GO2RTC_HOST=host.docker.internal  # or the go2rtc hostname/IP
+    - CAMDASH_GO2RTC_PORT=1984
+  ```
 
 ## Troubleshooting
 - No cameras after git pull: the DB is empty. Use Admin UI or import.

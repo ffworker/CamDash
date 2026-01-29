@@ -4,10 +4,11 @@
   // `window.CAMDASH_GO2RTC_HOST` and/or `window.CAMDASH_GO2RTC_PORT` before
   // this script runs. Otherwise the host defaults to the page host.
   go2rtcBase: (function () {
-    var host = window.CAMDASH_GO2RTC_HOST || window.GO2RTC_HOST || window.location.hostname || "";
-    var port = window.CAMDASH_GO2RTC_PORT || window.GO2RTC_PORT || 1984;
-    if (!host) return "";
-    // If you prefer same-origin proxy, set this to "" to use /api via nginx
+    // Prefer same-origin /api proxy (nginx) so clients don’t need direct access to go2rtc.
+    // Only build a direct URL when an explicit host override is provided.
+    var host = window.CAMDASH_GO2RTC_HOST ?? window.GO2RTC_HOST ?? "";
+    var port = window.CAMDASH_GO2RTC_PORT ?? window.GO2RTC_PORT ?? 1984;
+    if (!host) return ""; // use /api proxy
     return "http://" + host + (port ? ":" + port : "");
   })(),
 

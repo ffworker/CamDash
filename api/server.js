@@ -365,7 +365,9 @@ app.get("/dashboard/config.js", (req, res) => {
       return;
     }
 
-    const host = process.env.CAMDASH_GO2RTC_HOST || req.hostname || "";
+    // Only inject go2rtc host/port when explicitly configured. Default falls back
+    // to the same-origin /api proxy so browsers don’t need direct access to go2rtc.
+    const host = process.env.CAMDASH_GO2RTC_HOST || "";
     const port = process.env.CAMDASH_GO2RTC_PORT || "";
 
     const inject = [];

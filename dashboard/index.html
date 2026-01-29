@@ -44,6 +44,7 @@
 
       <div class="chip" id="pageChip"><span class="k" id="pageLabel">Seite</span><span class="v" id="pageValue">1/1</span></div>
       <div class="chip" id="clockChip"><span class="k" id="clockLabel">Stand</span><span class="v" id="clock">--:--:--</span></div>
+      <button class="chip btn hidden" id="wallBtn" title="Alle Kameras" aria-label="Alle Kameras">All</button>
       <button class="chip btn admin-btn hidden" id="adminBtn" title="Admin" aria-label="Admin">⚙</button>
     </div>
   </header>
@@ -89,6 +90,33 @@
         <section class="admin-section" id="adminCameras"></section>
         <section class="admin-section hidden" id="adminProfiles"></section>
       </div>
+    </div>
+  </div>
+
+  <div class="role-overlay hidden" id="roleOverlay" aria-hidden="true">
+    <div class="role-card">
+      <div class="role-title">Anmelden</div>
+      <div class="role-options">
+        <button class="role-btn" data-role="kiosk">Kiosk</button>
+        <button class="role-btn" data-role="priv">Übersicht</button>
+        <button class="role-btn" data-role="admin">Admin</button>
+      </div>
+      <div class="role-kiosk-select hidden" id="kioskSelectWrap">
+        <label for="kioskProfile">Slideshow</label>
+        <select id="kioskProfile"></select>
+      </div>
+      <div class="role-note">Kiosk: feste Slideshow · Übersicht: alle Cams als Snapshots · Admin: volle Kontrolle</div>
+    </div>
+  </div>
+
+  <div class="live-overlay hidden" id="liveOverlay" aria-hidden="true">
+    <div class="live-card">
+      <button class="live-close" id="liveClose" aria-label="Close">×</button>
+      <div class="live-header">
+        <div class="live-name" id="liveName"></div>
+        <div class="live-state" id="liveState"></div>
+      </div>
+      <video id="liveVideo" autoplay muted playsinline></video>
     </div>
   </div>
 

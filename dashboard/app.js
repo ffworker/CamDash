@@ -29,6 +29,7 @@
     pageLabel: document.getElementById("pageLabel"),
     clockLabel: document.getElementById("clockLabel"),
     adminBtn: document.getElementById("adminBtn"),
+    wallBtn: document.getElementById("wallBtn"),
     adminOverlay: document.getElementById("adminOverlay"),
     adminClose: document.getElementById("adminClose"),
     adminAuth: document.getElementById("adminAuth"),
@@ -40,6 +41,15 @@
     adminBody: document.getElementById("adminBody"),
     adminCameras: document.getElementById("adminCameras"),
     adminProfiles: document.getElementById("adminProfiles"),
+    roleOverlay: document.getElementById("roleOverlay"),
+    roleButtons: Array.from(document.querySelectorAll(".role-btn")),
+    kioskProfile: document.getElementById("kioskProfile"),
+    kioskSelectWrap: document.getElementById("kioskSelectWrap"),
+    wallOverlay: document.getElementById("liveOverlay"),
+    wallClose: document.getElementById("liveClose"),
+    liveVideo: document.getElementById("liveVideo"),
+    liveName: document.getElementById("liveName"),
+    liveState: document.getElementById("liveState"),
   };
 
   const ALLOWED_TIMERS = [30, 60, 90];
@@ -50,6 +60,11 @@
       mode: "local",
       apiBase: "/camdash-api",
       refreshSeconds: 20,
+    },
+    snapwall: {
+      refreshSeconds: 12,
+      width: 480,
+      height: 270,
     },
     labels: {
       prev: "Prev",
@@ -80,6 +95,8 @@
   const STORAGE = {
     timer: "camdash.timer",
     page: "camdash.page",
+    role: "camdash.role",
+    roleProfile: "camdash.roleProfile",
   };
   const PROFILE_QUERY_KEYS = ["profile", "profileId"];
   const AUTH_STORAGE_KEY = "camdash.adminAuth";
@@ -105,6 +122,11 @@
   let cleanupFns = [];
   let cycleHandle = null;
   let pagesSignature = "";
+  let role = loadLocal(STORAGE.role) || "kiosk"; // kiosk | priv | admin
+  let roleProfileId = loadLocal(STORAGE.roleProfile) || "";
+  let wallMode = false;
+  let snapshotTimer = null;
+  let liveHls = null;
 
   init().catch((err) => {
     console.error("CamDash init failed", err);
@@ -127,9 +149,11 @@
     startClock();
     initControls();
     initAdmin();
+    initRoles();
 
     setTimerUi(seconds);
     updateUrlState();
+    applyRoleUi();
     render();
     scheduleCycle(true);
     scheduleRemoteRefresh();
@@ -150,6 +174,7 @@
     const theme = ui.theme && typeof ui.theme === "object" ? ui.theme : {};
     const base = typeof cfgValue.go2rtcBase === "string" ? cfgValue.go2rtcBase.trim() : "";
     const dataSource = cfgValue.dataSource && typeof cfgValue.dataSource === "object" ? cfgValue.dataSource : {};
+    const snapwall = cfgValue.snapwall && typeof cfgValue.snapwall === "object" ? cfgValue.snapwall : {};
 
     const mode = dataSource.mode === "remote" ? "remote" : "local";
     const apiBase = cleanBase(dataSource.apiBase || DEFAULTS.dataSource.apiBase);
@@ -163,6 +188,11 @@
         mode,
         apiBase,
         refreshSeconds,
+      },
+      snapwall: {
+        refreshSeconds: clamp(toInt(snapwall.refreshSeconds, DEFAULTS.snapwall.refreshSeconds), 5, 120),
+        width: clamp(toInt(snapwall.width, DEFAULTS.snapwall.width), 120, 1920),
+        height: clamp(toInt(snapwall.height, DEFAULTS.snapwall.height), 90, 1080),
       },
       ui: {
         topbarAutoHide: ui.topbarAutoHide !== false,
@@ -259,6 +289,8 @@
   function setRemoteState(state, initial) {
     dataState = state;
     maxCamsPerSlide = toInt(state?.maxCamsPerSlide, 6) || 6;
+    fillKioskProfiles();
+    applyRoleUi();
     let nextPages = buildPagesFromState(state);
     if (!nextPages.length) {
       nextPages = normalizeLocalPages(config.pages);
@@ -284,7 +316,7 @@
   function buildPagesFromState(state) {
     const profiles = Array.isArray(state?.profiles) ? state.profiles : [];
     const cameras = Array.isArray(state?.cameras) ? state.cameras : [];
-    const overrideId = resolveProfileOverride(profiles);
+    const overrideId = roleProfileId || resolveProfileOverride(profiles);
     const activeProfileId = overrideId || state?.activeProfileId;
     const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0];
 
@@ -368,6 +400,41 @@
       }
     });
   }
+
+  function initRoles() {
+    if (!dom.roleOverlay) return;
+
+    fillKioskProfiles();
+    toggleRoleOverlay(true);
+
+    dom.roleButtons.forEach((btn) => {
+      btn.addEventListener("click", () => handleRoleSelection(btn.dataset.role));
+    });
+
+    if (dom.kioskProfile) {
+      dom.kioskProfile.addEventListener("change", () => {
+        roleProfileId = dom.kioskProfile.value || "";
+        saveLocal(STORAGE.roleProfile, roleProfileId);
+      });
+    }
+
+    if (dom.wallBtn) {
+      dom.wallBtn.addEventListener("click", () => {
+        wallMode = !wallMode;
+        render();
+        if (!wallMode) scheduleCycle(true);
+      });
+    }
+
+    if (dom.wallOverlay) {
+      dom.wallOverlay.addEventListener("click", (e) => {
+        if (e.target === dom.wallOverlay) closeLive();
+      });
+    }
+    if (dom.wallClose) {
+      dom.wallClose.addEventListener("click", closeLive);
+    }
+  }
   function initAdmin() {
     if (!config.ui.adminEnabled || config.dataSource.mode !== "remote") return;
 
@@ -404,6 +471,83 @@
     if (url.searchParams.get("admin") === "1") {
       toggleAdmin(true);
     }
+  }
+
+  function handleRoleSelection(nextRole) {
+    if (!nextRole) return;
+    role = nextRole;
+    wallMode = role === "priv";
+
+    if (role === "kiosk") {
+      if (dom.kioskProfile && dom.kioskProfile.value) {
+        roleProfileId = dom.kioskProfile.value;
+        saveLocal(STORAGE.roleProfile, roleProfileId);
+      } else if (dataState?.activeProfileId) {
+        roleProfileId = dataState.activeProfileId;
+      }
+    } else if (role !== "kiosk") {
+      roleProfileId = "";
+    }
+
+    saveLocal(STORAGE.role, role);
+    applyRoleUi();
+    toggleRoleOverlay(false);
+    render();
+    if (wallMode) {
+      stopCycle();
+    } else {
+      scheduleCycle(true);
+    }
+  }
+
+  function applyRoleUi() {
+    document.body.classList.toggle("role-kiosk", role === "kiosk");
+    document.body.classList.toggle("role-priv", role === "priv");
+    document.body.classList.toggle("role-admin", role === "admin");
+
+    const showAdmin = role === "admin" && config.ui.adminEnabled && config.dataSource.mode === "remote";
+    setVisible(dom.adminBtn, showAdmin);
+
+    const showWall = role === "priv";
+    setVisible(dom.wallBtn, showWall);
+
+    const showNav = config.ui.showNav && role !== "kiosk";
+    setVisible(dom.prevBtn, showNav);
+    setVisible(dom.nextBtn, showNav);
+
+    const showTimer = config.ui.showTimer && config.autoCycle && role !== "kiosk";
+    setVisible(dom.timerChip, showTimer);
+    setVisible(dom.timerSelect, showTimer);
+
+    if (role === "kiosk") {
+      stopCycle();
+      scheduleCycle(true);
+    }
+  }
+
+  function toggleRoleOverlay(show) {
+    if (!dom.roleOverlay) return;
+    dom.roleOverlay.classList.toggle("hidden", !show);
+    dom.roleOverlay.setAttribute("aria-hidden", show ? "false" : "true");
+
+    if (show && dataState) {
+      fillKioskProfiles();
+    }
+  }
+
+  function fillKioskProfiles() {
+    if (!dom.kioskProfile || !dataState?.profiles) return;
+    const select = dom.kioskProfile;
+    select.innerHTML = "";
+    dataState.profiles.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name || "Profile";
+      select.appendChild(opt);
+    });
+    const desired = roleProfileId || dataState.activeProfileId;
+    if (desired) select.value = desired;
+    setVisible(dom.kioskSelectWrap, true);
   }
 
   async function ensureAdminAccess() {
@@ -1138,6 +1282,7 @@
 
   function render() {
     cleanup();
+    if (wallMode) return renderWall();
     if (!pages.length) return;
 
     const page = pages[pageIndex];
@@ -1166,6 +1311,30 @@
     });
   }
 
+  function renderWall() {
+    document.body.classList.add("wall-mode");
+    const cams = Array.isArray(dataState?.cameras) ? dataState.cameras : [];
+    if (dom.subtitle) dom.subtitle.textContent = "Alle Kameras";
+    if (dom.pageValue) dom.pageValue.textContent = "–";
+    document.title = `${config.ui.titlePrefix} - Übersicht`;
+
+    if (!dom.grid) return;
+    dom.grid.innerHTML = "";
+    dom.grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(220px,1fr))";
+    dom.grid.style.gridTemplateRows = "";
+
+    if (!cams.length) {
+      dom.grid.appendChild(makeEmptyTile(config.ui.labels.noCameras));
+      return;
+    }
+
+    cams.forEach((cam) => {
+      dom.grid.appendChild(makeSnapTile(cam));
+    });
+
+    startSnapshotRefresh();
+  }
+
   function makeEmptyTile(label) {
     const tile = document.createElement("div");
     tile.className = "tile empty fade";
@@ -1176,6 +1345,31 @@
       text.textContent = label;
       tile.appendChild(text);
     }
+    return tile;
+  }
+
+  function makeSnapTile(cam) {
+    const tile = document.createElement("div");
+    tile.className = "snap-tile fade";
+
+    const img = document.createElement("img");
+    img.dataset.src = cam.source;
+    img.src = snapshotUrl(cam.source);
+    tile.appendChild(img);
+
+    const badge = document.createElement("div");
+    badge.className = "snap-badge";
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = cam.name || cam.source;
+    const loc = document.createElement("div");
+    loc.className = "loc";
+    loc.textContent = cam.location || "";
+    badge.appendChild(name);
+    if (cam.location) badge.appendChild(loc);
+    tile.appendChild(badge);
+
+    tile.addEventListener("click", () => openLive(cam));
     return tile;
   }
 
@@ -1298,6 +1492,92 @@
     return `${base}/api/stream.m3u8?src=${encodeURIComponent(streamId)}`;
   }
 
+  function snapshotUrl(streamId) {
+    const base = config.go2rtcBase;
+    const qs = `src=${encodeURIComponent(streamId)}&w=${config.snapwall.width}&h=${
+      config.snapwall.height
+    }&_=${Date.now()}`;
+    return `${base}/api/stream.jpeg?${qs}`;
+  }
+
+  function startSnapshotRefresh() {
+    if (snapshotTimer) clearInterval(snapshotTimer);
+    refreshSnapshots();
+    snapshotTimer = setInterval(refreshSnapshots, config.snapwall.refreshSeconds * 1000);
+    cleanupFns.push(() => {
+      if (snapshotTimer) clearInterval(snapshotTimer);
+      snapshotTimer = null;
+    });
+  }
+
+  function refreshSnapshots() {
+    if (!dom.grid) return;
+    const imgs = Array.from(dom.grid.querySelectorAll(".snap-tile img"));
+    imgs.forEach((img) => {
+      const src = img.dataset.src;
+      if (!src) return;
+      img.src = snapshotUrl(src);
+    });
+  }
+
+  function openLive(cam) {
+    if (!dom.wallOverlay || !dom.liveVideo) return;
+    dom.liveName.textContent = cam.name || cam.source;
+    dom.liveState.textContent = "loading…";
+    dom.wallOverlay.classList.remove("hidden");
+    dom.wallOverlay.setAttribute("aria-hidden", "false");
+
+    const video = dom.liveVideo;
+    video.src = "";
+    const src = hlsUrl(cam.source || cam.id);
+
+    const HLS = window.Hls;
+    if (liveHls) {
+      try { liveHls.destroy(); } catch (_) {}
+      liveHls = null;
+    }
+
+    if (HLS && HLS.isSupported()) {
+      const hls = new HLS(config.hls);
+      hls.on(HLS.Events.MANIFEST_PARSED, () => (dom.liveState.textContent = "live"));
+      hls.on(HLS.Events.ERROR, (_evt, data) => {
+        if (data?.fatal) {
+          dom.liveState.textContent = "error";
+          try { hls.destroy(); } catch (_) {}
+        }
+      });
+      hls.loadSource(src);
+      hls.attachMedia(video);
+      liveHls = hls;
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+      video.addEventListener("playing", () => (dom.liveState.textContent = "live"), { once: true });
+      video.addEventListener("error", () => (dom.liveState.textContent = "error"), { once: true });
+    } else {
+      dom.liveState.textContent = "HLS unsupported";
+    }
+  }
+
+  function closeLive(silent) {
+    if (!dom.wallOverlay) return;
+    dom.wallOverlay.classList.add("hidden");
+    dom.wallOverlay.setAttribute("aria-hidden", "true");
+    if (dom.liveVideo) {
+      try {
+        dom.liveVideo.pause();
+        dom.liveVideo.removeAttribute("src");
+        dom.liveVideo.load();
+      } catch (_) {}
+    }
+    if (liveHls) {
+      try { liveHls.destroy(); } catch (_) {}
+      liveHls = null;
+    }
+    if (!silent) {
+      // keep overlay hidden
+    }
+  }
+
   function applyGridLayout(count) {
     if (!dom.grid) return;
     if (config.ui.layout !== "auto") {
@@ -1332,18 +1612,30 @@
   }
 
   function cleanup() {
+    document.body.classList.remove("wall-mode");
+
     cleanupFns.forEach((fn) => fn());
     cleanupFns = [];
+
+    if (snapshotTimer) clearInterval(snapshotTimer);
+    snapshotTimer = null;
 
     hlsInstances.forEach((hls) => {
       try { hls.destroy(); } catch {}
     });
     hlsInstances = [];
 
+    closeLive(true);
+
     if (dom.grid) dom.grid.innerHTML = "";
   }
 
   function scheduleCycle(force = false) {
+    if (wallMode) {
+      stopCycle();
+      return;
+    }
+
     if (!config.autoCycle || pages.length <= 1) {
       stopCycle();
       return;

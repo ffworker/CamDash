@@ -83,6 +83,16 @@ Container version:
 docker compose run --rm api node /app/import-config.js --reset --replace --profile "Default"
 ```
 
+## Auto import on first run
+If `go2rtc.yml` exists and the DB is empty, the API will auto-import streams on startup. It also reads `dashboard/config.js` (if present) to keep camera names and slide groupings aligned with your config.
+
+Docker Compose already wires this by mounting the files and setting:
+- `CAMDASH_IMPORT_GO2RTC=/config/go2rtc.yml`
+- `CAMDASH_IMPORT_CONFIG=/config/config.js`
+- `CAMDASH_IMPORT_PROFILE=Default`
+
+To disable auto import, remove those env vars/volumes or delete `go2rtc.yml` before the first start.
+
 ## Where the admin page lives
 Default URL:
 - http://<host>:8080/?admin=1

@@ -31,8 +31,14 @@ services:
       # Host and port for go2rtc. Defaults to host.docker.internal:1984 on Docker Desktop.
       - CAMDASH_GO2RTC_HOST=host.docker.internal
       - CAMDASH_GO2RTC_PORT=1984
+      # First-run auto import from go2rtc.yml + dashboard config.
+      - CAMDASH_IMPORT_GO2RTC=/config/go2rtc.yml
+      - CAMDASH_IMPORT_CONFIG=/config/config.js
+      - CAMDASH_IMPORT_PROFILE=Default
       - CAMDASH_MAX_CAMS=6
       - CAMDASH_ADMIN_USER=admin
       - CAMDASH_ADMIN_PASS=29Logserv75
     volumes:
       - ./data:/data
+      - ./go2rtc.yml:/config/go2rtc.yml:ro
+      - ./dashboard/config.js:/config/config.js:ro

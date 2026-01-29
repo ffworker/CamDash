@@ -2,7 +2,9 @@
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
+const vm = require("vm");
 const crypto = require("crypto");
+const yaml = require("js-yaml");
 const { open } = require("sqlite");
 const sqlite3 = require("sqlite3");
 
@@ -12,6 +14,9 @@ const MAX_CAMS_PER_SLIDE = parseInt(process.env.CAMDASH_MAX_CAMS || "6", 10);
 const ADMIN_USER = process.env.CAMDASH_ADMIN_USER || "";
 const ADMIN_PASS = process.env.CAMDASH_ADMIN_PASS || "";
 const AUTH_ENABLED = Boolean(ADMIN_USER && ADMIN_PASS);
+const IMPORT_GO2RTC_PATH = process.env.CAMDASH_IMPORT_GO2RTC || path.join(__dirname, "..", "go2rtc.yml");
+const IMPORT_CONFIG_PATH = process.env.CAMDASH_IMPORT_CONFIG || path.join(__dirname, "..", "dashboard", "config.js");
+const IMPORT_PROFILE = process.env.CAMDASH_IMPORT_PROFILE || "Default";
 
 const app = express();
 app.use(cors());
@@ -105,6 +110,8 @@ async function initDb() {
     ]);
     await db.run("INSERT INTO settings (key, value) VALUES (?, ?)", ["activeProfileId", profileId]);
   }
+
+  await autoImportIfNeeded();
 }
 
 function cleanText(value, fallback = "") {
@@ -126,6 +133,172 @@ async function setActiveProfileId(profileId) {
     profileId,
   ]);
   return true;
+}
+
+function readConfig(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    const code = fs.readFileSync(filePath, "utf8");
+    const sandbox = { window: {} };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox, { timeout: 1000 });
+    return sandbox.window.CAMDASH_CONFIG || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function extractPages(config) {
+  if (!config || !Array.isArray(config.pages)) return [];
+  return config.pages.map((page) => ({
+    name: page?.name || "Slide",
+    cams: Array.isArray(page?.cams) ? page.cams.filter(Boolean) : [],
+  }));
+}
+
+function readStreams(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return {};
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    const doc = yaml.load(content) || {};
+    return doc.streams && typeof doc.streams === "object" ? doc.streams : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function buildCameraMap(pages, streams) {
+  const map = new Map();
+
+  pages.forEach((page) => {
+    page.cams.forEach((cam) => {
+      if (!cam || !cam.id) return;
+      const entry = map.get(cam.id) || {
+        source: cam.id,
+        name: cam.label || cam.id,
+        location: page.name || "",
+      };
+
+      if (!entry.name && cam.label) entry.name = cam.label;
+      if (!entry.location && page.name) entry.location = page.name;
+
+      map.set(cam.id, entry);
+    });
+  });
+
+  Object.keys(streams || {}).forEach((key) => {
+    if (map.has(key)) return;
+    map.set(key, { source: key, name: key, location: "" });
+  });
+
+  return map;
+}
+
+function buildSlides(pages, cameraMap, maxCams) {
+  const slides = pages.map((page) => ({
+    name: page.name,
+    cameraSources: page.cams.map((cam) => cam.id).filter(Boolean),
+  }));
+
+  if (slides.length) return slides;
+
+  const sources = Array.from(cameraMap.keys());
+  if (!sources.length) return [];
+
+  const chunkSize = maxCams || 6;
+  const result = [];
+  for (let i = 0; i < sources.length; i += chunkSize) {
+    result.push({
+      name: `Slide ${result.length + 1}`,
+      cameraSources: sources.slice(i, i + chunkSize),
+    });
+  }
+  return result;
+}
+
+async function getOrCreateProfileId(name) {
+  const existing = await db.get("SELECT id FROM profiles WHERE name = ?", [name]);
+  if (existing) return existing.id;
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db.run("INSERT INTO profiles (id, name, created_at) VALUES (?, ?, ?)", [id, name, now]);
+  return id;
+}
+
+async function autoImportIfNeeded() {
+  let inTransaction = false;
+  try {
+    const cameraCount = await db.get("SELECT COUNT(*) as count FROM cameras");
+    if (cameraCount && cameraCount.count > 0) return;
+
+    const streams = readStreams(IMPORT_GO2RTC_PATH);
+    if (!streams || Object.keys(streams).length === 0) return;
+
+    const config = readConfig(IMPORT_CONFIG_PATH);
+    const pages = extractPages(config);
+
+    const cameraMap = buildCameraMap(pages, streams);
+    if (!cameraMap.size) return;
+
+    const slides = buildSlides(pages, cameraMap, MAX_CAMS_PER_SLIDE);
+    if (!slides.length) return;
+
+    const profileId = await getOrCreateProfileId(IMPORT_PROFILE);
+    const now = new Date().toISOString();
+    const cameraIdBySource = new Map();
+    await db.exec("BEGIN");
+    inTransaction = true;
+    await db.run("DELETE FROM slides WHERE profile_id = ?", [profileId]);
+
+    for (const entry of cameraMap.values()) {
+      const id = crypto.randomUUID();
+      await db.run("INSERT INTO cameras (id, name, location, source, created_at) VALUES (?, ?, ?, ?, ?)", [
+        id,
+        entry.name,
+        entry.location,
+        entry.source,
+        now,
+      ]);
+      cameraIdBySource.set(entry.source, id);
+    }
+
+    for (let i = 0; i < slides.length; i += 1) {
+      const slide = slides[i];
+      const slideId = crypto.randomUUID();
+      const slideName = slide.name || `Slide ${i + 1}`;
+
+      await db.run("INSERT INTO slides (id, profile_id, name, position) VALUES (?, ?, ?, ?)", [
+        slideId,
+        profileId,
+        slideName,
+        i,
+      ]);
+
+      const camSources = (slide.cameraSources || []).slice(0, MAX_CAMS_PER_SLIDE);
+      for (let pos = 0; pos < camSources.length; pos += 1) {
+        const camId = cameraIdBySource.get(camSources[pos]);
+        if (!camId) continue;
+        await db.run("INSERT INTO slide_cameras (slide_id, camera_id, position) VALUES (?, ?, ?)", [
+          slideId,
+          camId,
+          pos,
+        ]);
+      }
+    }
+
+    await db.exec("COMMIT");
+    await setActiveProfileId(profileId);
+
+    console.log(`Auto-imported ${cameraIdBySource.size} cameras from go2rtc.yml`);
+  } catch (err) {
+    try {
+      if (inTransaction) await db.exec("ROLLBACK");
+    } catch (rollbackErr) {
+      // ignore rollback errors to preserve original failure
+    }
+    console.error("Auto import failed:", err.message || err);
+  }
 }
 
 async function fetchState() {

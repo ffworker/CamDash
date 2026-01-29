@@ -81,6 +81,7 @@
     timer: "camdash.timer",
     page: "camdash.page",
   };
+  const PROFILE_QUERY_KEYS = ["profile", "profileId"];
   const AUTH_STORAGE_KEY = "camdash.adminAuth";
 
   const adminState = {
@@ -283,7 +284,9 @@
   function buildPagesFromState(state) {
     const profiles = Array.isArray(state?.profiles) ? state.profiles : [];
     const cameras = Array.isArray(state?.cameras) ? state.cameras : [];
-    const activeProfile = profiles.find((profile) => profile.id === state?.activeProfileId) || profiles[0];
+    const overrideId = resolveProfileOverride(profiles);
+    const activeProfileId = overrideId || state?.activeProfileId;
+    const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0];
 
     if (!activeProfile) return [];
 
@@ -633,6 +636,7 @@
               <div class="profile-name">${escapeHtml(profile.name)}</div>
               ${isActive ? '<span class="profile-tag">Active</span>' : ""}
             </div>
+            <div class="profile-id">ID: ${escapeHtml(profile.id)}</div>
             <div class="admin-actions">
               ${!isActive ? `<button class="admin-action" data-action="profile-set-active" data-id="${profile.id}">Set active</button>` : ""}
               ${profiles.length > 1 ? `<button class="admin-action" data-action="profile-delete" data-id="${profile.id}">Delete</button>` : ""}
@@ -1393,6 +1397,18 @@
     }
 
     return 0;
+  }
+
+  function resolveProfileOverride(profiles) {
+    if (!Array.isArray(profiles) || !profiles.length) return null;
+    const url = new URL(location.href);
+    let desired = "";
+    for (const key of PROFILE_QUERY_KEYS) {
+      desired = cleanText(url.searchParams.get(key));
+      if (desired) break;
+    }
+    if (!desired) return null;
+    return profiles.find((profile) => profile.id === desired) ? desired : null;
   }
 
   function clampPageIndex(value) {

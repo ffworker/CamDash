@@ -179,6 +179,31 @@ app.get("/auth", (_req, res) => {
   res.json({ ok: true, enabled: AUTH_ENABLED });
 });
 
+// Serve dashboard/config.js with injected host/port so the client can
+// determine the go2rtc base URL when the file is requested. Priority:
+// 1) Environment variables `CAMDASH_GO2RTC_HOST`/`CAMDASH_GO2RTC_PORT`
+// 2) Request hostname
+// 3) empty (client will fall back to same-origin)
+app.get("/dashboard/config.js", (req, res) => {
+  const configPath = path.join(__dirname, "..", "dashboard", "config.js");
+  fs.readFile(configPath, "utf8", (err, data) => {
+    if (err) {
+      res.status(500).type("text/plain").send("// failed to load config.js\n");
+      return;
+    }
+
+    const host = process.env.CAMDASH_GO2RTC_HOST || req.hostname || "";
+    const port = process.env.CAMDASH_GO2RTC_PORT || "";
+
+    const inject = [];
+    if (host) inject.push(`window.CAMDASH_GO2RTC_HOST=${JSON.stringify(host)};`);
+    if (port) inject.push(`window.CAMDASH_GO2RTC_PORT=${JSON.stringify(port)};`);
+    const out = (inject.length ? inject.join("") + "\n" : "") + data;
+
+    res.type("application/javascript").send(out);
+  });
+});
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });

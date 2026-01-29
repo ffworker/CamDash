@@ -1,6 +1,15 @@
 ﻿window.CAMDASH_CONFIG = {
   // Base URL for go2rtc, or "" to use same-origin /api via nginx
-  go2rtcBase: "http://172.17.1.56:1984",
+  // If you want to override from the server that serves this file, set
+  // `window.CAMDASH_GO2RTC_HOST` and/or `window.CAMDASH_GO2RTC_PORT` before
+  // this script runs. Otherwise the host defaults to the page host.
+  go2rtcBase: (function () {
+    var host = window.CAMDASH_GO2RTC_HOST || window.GO2RTC_HOST || window.location.hostname || "";
+    var port = window.CAMDASH_GO2RTC_PORT || window.GO2RTC_PORT || 1984;
+    if (!host) return "";
+    // If you prefer same-origin proxy, set this to "" to use /api via nginx
+    return "http://" + host + (port ? ":" + port : "");
+  })(),
 
   // Default page cycle interval (seconds)
   defaultSeconds: 60,

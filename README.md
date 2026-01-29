@@ -96,6 +96,20 @@ Options:
 ## go2rtc
 If you use go2rtc, define streams in `go2rtc.yml` and reference the stream ID in the camera source (e.g., `einfahrt_2`).
 
+## go2rtc host configuration
+The API will inject `window.CAMDASH_GO2RTC_HOST` and `window.CAMDASH_GO2RTC_PORT` into `dashboard/config.js` at request time. This lets the dashboard compute the correct go2rtc base URL without hard-coding an IP.
+
+- Set the environment variables in the API container to point to your go2rtc instance:
+
+```yaml
+# in docker-compose.yml (api service)
+environment:
+	- CAMDASH_GO2RTC_HOST=host.docker.internal  # or the go2rtc hostname/IP
+	- CAMDASH_GO2RTC_PORT=1984
+```
+
+- If you don't set these, the client falls back to the page host (`window.location.hostname`).
+
 ## Troubleshooting
 - No cameras after git pull: the DB is empty. Use Admin UI or import.
 - API offline: check `docker compose ps` and `/camdash-api/health`.

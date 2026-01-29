@@ -40,7 +40,7 @@ gsettings set org.gnome.desktop.session idle-delay 0
 gsettings set org.gnome.mutter dynamic-workspaces false
 gsettings set org.gnome.desktop.wm.preferences num-workspaces 1
 
-firefox --kiosk --mute-audio http://172.17.1.56:8080/
+firefox --kiosk --mute-audio http://<host>:8080/
 ```
 
 6) Make it executable:

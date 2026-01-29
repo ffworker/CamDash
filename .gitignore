@@ -26,6 +26,7 @@ data/
 # Local configs with secrets
 go2rtc.yml
 dashboard/config.local.js
+dashboard/config.runtime.js
 
 # Logs & temp
 *.log

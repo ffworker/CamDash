@@ -22,6 +22,7 @@ Prerequisites:
 
 Create local config files:
 - Copy `.env.example` to `.env` and set your admin credentials
+- (Optional) set `CAMDASH_HOST` or `CAMDASH_GO2RTC_BASE` in `.env` to control the go2rtc base URL
 - If you use go2rtc, copy `go2rtc-example.yml` to `go2rtc.yml` and edit streams
 - Optional: copy `dashboard/config.js` to `dashboard/config.local.js` for local overrides (ignored by git)
 
@@ -43,11 +44,11 @@ Admin UI (choose one):
 - `Ctrl + Shift + A` in the browser
 
 ## Admin login
-The admin UI is protected by basic login (API). Default credentials from `docker-compose.yml`:
+The admin UI is protected by basic login (API). Default credentials from `.env.example`:
 - user: `admin`
 - pass: `changeme`
 
-Change them in `docker-compose.yml`:
+Change them in `.env`:
 ```
 CAMDASH_ADMIN_USER=youruser
 CAMDASH_ADMIN_PASS=yourpass
@@ -71,7 +72,11 @@ Key options:
 - `hls.*`: Hls.js tuning
 - `pages`: local fallback pages (used only if `dataSource.mode = "local"`)
 
-`dashboard/config.local.js` is loaded after `config.js` (if present) and can override settings locally.
+`dashboard/config.runtime.js` is generated at container start from `.env` (if present), then
+`dashboard/config.local.js` loads after `config.js` and can override settings locally.
+
+Local files (`.env`, `go2rtc.yml`, `dashboard/config.local.js`, `dashboard/config.runtime.js`, `data/`) are git-ignored,
+so `git pull` does not overwrite your running system configs.
 
 ## Import existing config
 Import your current `dashboard/config.js` + `go2rtc.yml` into the DB:

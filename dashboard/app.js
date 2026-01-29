@@ -130,11 +130,12 @@
   let cleanupFns = [];
   let cycleHandle = null;
   let pagesSignature = "";
-  let role = loadLocal(STORAGE.role) || "kiosk"; // kiosk | priv | admin
+  let role = null; // kiosk | priv | admin (set after auth)
   let roleProfileId = loadLocal(STORAGE.roleProfile) || "";
   let wallMode = false;
   let snapshotTimer = null;
   let liveHls = null;
+  let isAuthed = false;
 
   init().catch((err) => {
     console.error("CamDash init failed", err);
@@ -429,7 +430,6 @@
     if (dom.roleOverlay) {
       dom.roleOverlay.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
-          // default to kiosk if none chosen yet
           const activeRole = document.activeElement?.dataset?.role || "kiosk";
           handleRoleSelection(activeRole);
         }
@@ -511,6 +511,7 @@
 
     role = nextRole;
     wallMode = role === "priv";
+    isAuthed = true;
 
     if (role === "kiosk") {
       if (dom.kioskProfile && dom.kioskProfile.value) {
@@ -535,6 +536,16 @@
   }
 
   function applyRoleUi() {
+    if (!isAuthed) {
+      setVisible(dom.adminBtn, false);
+      setVisible(dom.wallBtn, false);
+      setVisible(dom.prevBtn, false);
+      setVisible(dom.nextBtn, false);
+      setVisible(dom.timerChip, false);
+      setVisible(dom.timerSelect, false);
+      return;
+    }
+
     document.body.classList.toggle("role-kiosk", role === "kiosk");
     document.body.classList.toggle("role-priv", role === "priv");
     document.body.classList.toggle("role-admin", role === "admin");
@@ -1315,6 +1326,11 @@
   }
 
   function render() {
+    if (!isAuthed) {
+      toggleRoleOverlay(true);
+      return;
+    }
+
     cleanup();
     if (wallMode) return renderWall();
     if (!pages.length) return;
@@ -1528,10 +1544,8 @@
 
   function snapshotUrl(streamId) {
     const base = config.go2rtcBase;
-    const qs = `src=${encodeURIComponent(streamId)}&w=${config.snapwall.width}&h=${
-      config.snapwall.height
-    }&_=${Date.now()}`;
-    return `${base}/api/stream.jpeg?${qs}`;
+    const qs = `src=${encodeURIComponent(streamId)}&w=${config.snapwall.width}&h=${config.snapwall.height}&_=${Date.now()}`;
+    return `${base}/api/frame.jpeg?${qs}`;
   }
 
   function startSnapshotRefresh() {
@@ -1665,7 +1679,7 @@
   }
 
   function scheduleCycle(force = false) {
-    if (wallMode) {
+    if (!isAuthed || wallMode) {
       stopCycle();
       return;
     }

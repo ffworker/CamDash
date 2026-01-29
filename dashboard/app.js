@@ -1370,8 +1370,8 @@
 
     if (!dom.grid) return;
     dom.grid.innerHTML = "";
-    dom.grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(220px,1fr))";
-    dom.grid.style.gridTemplateRows = "";
+    dom.grid.style.gridTemplateColumns = "repeat(5, minmax(0,1fr))";
+    dom.grid.style.gridTemplateRows = "repeat(4, minmax(0,1fr))";
 
     if (!cams.length) {
       dom.grid.appendChild(makeEmptyTile(config.ui.labels.noCameras));

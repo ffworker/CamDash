@@ -187,6 +187,7 @@ async function initDb() {
     );
   `);
 
+  await migrateUsersTable();
   const profileCount = await db.get("SELECT COUNT(*) as count FROM profiles");
   if (!profileCount || profileCount.count === 0) {
     const profileId = crypto.randomUUID();
@@ -205,6 +206,18 @@ async function initDb() {
 
   await seedUsers();
   await autoImportIfNeeded();
+}
+
+async function migrateUsersTable() {
+  const rows = await db.all("PRAGMA table_info(users)");
+  const hasStartProfile = rows.some((r) => r.name === "start_profile_id");
+  const hasStartView = rows.some((r) => r.name === "start_view");
+  if (!hasStartProfile) {
+    await db.run("ALTER TABLE users ADD COLUMN start_profile_id TEXT");
+  }
+  if (!hasStartView) {
+    await db.run("ALTER TABLE users ADD COLUMN start_view TEXT DEFAULT 'slides'");
+  }
 }
 
 async function seedUsers() {

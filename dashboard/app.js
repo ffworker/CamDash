@@ -29,6 +29,7 @@
     pageLabel: document.getElementById("pageLabel"),
     clockLabel: document.getElementById("clockLabel"),
     adminBtn: document.getElementById("adminBtn"),
+    logoutBtn: document.getElementById("logoutBtn"),
     wallBtn: document.getElementById("wallBtn"),
     adminOverlay: document.getElementById("adminOverlay"),
     adminClose: document.getElementById("adminClose"),
@@ -99,6 +100,8 @@
     page: "camdash.page",
     roleProfile: "camdash.roleProfile",
     token: "camdash.token",
+    role: "camdash.role",
+    startView: "camdash.startView",
   };
   const PROFILE_QUERY_KEYS = ["profile", "profileId"];
   const AUTH_STORAGE_KEY = "camdash.adminAuth";
@@ -136,6 +139,8 @@
   let isAuthed = false;
   let liveStateLabel = null;
   let authToken = loadLocal(STORAGE.token) || "";
+  role = loadLocal(STORAGE.role) || null;
+  wallMode = loadLocal(STORAGE.startView) === "wall";
 
   init().catch((err) => {
     console.error("CamDash init failed", err);
@@ -447,6 +452,11 @@
         if (!wallMode) scheduleCycle(true);
       });
     }
+    if (dom.logoutBtn) {
+      dom.logoutBtn.addEventListener("click", () => {
+        logout();
+      });
+    }
 
     if (dom.wallOverlay) {
       dom.wallOverlay.addEventListener("click", (e) => {
@@ -543,10 +553,29 @@
       });
   }
 
+  function logout() {
+    authToken = "";
+    role = null;
+    roleProfileId = "";
+    wallMode = false;
+    isAuthed = false;
+    saveLocal(STORAGE.token, "");
+    saveLocal(STORAGE.role, "");
+    saveLocal(STORAGE.roleProfile, "");
+    saveLocal(STORAGE.startView, "");
+    adminState.open = false;
+    setVisible(dom.adminOverlay, false);
+    dom.adminOverlay?.setAttribute("aria-hidden", "true");
+    toggleRoleOverlay(true);
+    renderEmptyState("Bitte einloggen");
+    stopCycle();
+  }
+
   function applyRoleUi() {
     if (!isAuthed) {
       setVisible(dom.adminBtn, false);
       setVisible(dom.wallBtn, false);
+      setVisible(dom.logoutBtn, false);
       setVisible(dom.prevBtn, false);
       setVisible(dom.nextBtn, false);
       setVisible(dom.timerChip, false);
@@ -566,6 +595,7 @@
 
     const showWall = role === "priv" || role === "admin";
     setVisible(dom.wallBtn, showWall);
+    setVisible(dom.logoutBtn, true);
 
     const showNav = config.ui.showNav && (role === "admin" || role === "priv");
     setVisible(dom.prevBtn, showNav);

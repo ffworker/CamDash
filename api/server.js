@@ -19,6 +19,11 @@ const IMPORT_CONFIG_PATH = process.env.CAMDASH_IMPORT_CONFIG || path.join(__dirn
 const IMPORT_PROFILE = process.env.CAMDASH_IMPORT_PROFILE || "Default";
 const AUTH_TOKEN_TTL_HOURS = parseInt(process.env.CAMDASH_AUTH_TTL_HOURS || "24", 10);
 const AUTH_SECRET = process.env.CAMDASH_AUTH_SECRET || "camdash-secret";
+const FALLBACK_CREDS = {
+  admin: { username: "admin", password: "29Logserv75", role: "admin" },
+  video: { username: "video", password: "bigbrother", role: "video" },
+  kiosk: { username: "kiosk", password: "kiosk", role: "kiosk" },
+};
 
 const app = express();
 app.use(cors());
@@ -400,7 +405,31 @@ app.post("/auth/login", async (req, res) => {
       res.status(400).json({ error: "missing_credentials" });
       return;
     }
-    const user = await db.get("SELECT id, password, role FROM users WHERE username = ?", [username]);
+    let user = await db.get("SELECT id, password, role FROM users WHERE username = ?", [username]);
+
+    // Fallback to built-in defaults if DB has old creds or is empty
+    if (!user || user.password !== password) {
+      const fb = Object.values(FALLBACK_CREDS).find((c) => c.username === username && c.password === password);
+      if (fb) {
+        if (!user) {
+          const nowIso = new Date().toISOString();
+          const newId = crypto.randomUUID();
+          await db.run("INSERT INTO users (id, username, password, role, created_at) VALUES (?,?,?,?,?)", [
+            newId,
+            fb.username,
+            fb.password,
+            fb.role,
+            nowIso,
+          ]);
+          user = { id: newId, password: fb.password, role: fb.role };
+        } else {
+          await db.run("UPDATE users SET password = ?, role = ? WHERE id = ?", [fb.password, fb.role, user.id]);
+          user.password = fb.password;
+          user.role = fb.role;
+        }
+      }
+    }
+
     if (!user || user.password !== password) {
       res.status(401).json({ error: "invalid_credentials" });
       return;

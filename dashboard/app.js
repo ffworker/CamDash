@@ -133,7 +133,7 @@
   let pagesSignature = "";
   let role = null; // kiosk | priv | admin (set after auth)
   let roleProfileId = loadLocal(STORAGE.roleProfile) || "";
-  let wallMode = false;
+  let wallMode = loadLocal(STORAGE.startView) === "wall";
   let snapshotTimer = null;
   let liveHls = null;
   let isAuthed = false;
@@ -331,14 +331,10 @@
     const profiles = Array.isArray(state?.profiles) ? state.profiles : [];
     const cameras = Array.isArray(state?.cameras) ? state.cameras : [];
 
-    let chosenProfileId = state?.activeProfileId;
+    let chosenProfileId = roleProfileId || state?.activeProfileId;
     if (role === "admin") {
-      const overrideId = roleProfileId || resolveProfileOverride(profiles);
-      chosenProfileId = overrideId || chosenProfileId;
-    } else if (role === "kiosk" && roleProfileId) {
-      chosenProfileId = roleProfileId;
-    } else if (role === "priv" && roleProfileId) {
-      chosenProfileId = roleProfileId;
+      const overrideId = resolveProfileOverride(profiles);
+      if (overrideId) chosenProfileId = overrideId;
     }
 
     const activeProfile = profiles.find((profile) => profile.id === chosenProfileId) || profiles[0];
@@ -523,12 +519,15 @@
         if (!payload || !payload.token || !payload.role) throw new Error("invalid");
         authToken = payload.token;
         saveLocal(STORAGE.token, authToken);
+        saveLocal(STORAGE.role, role);
+        saveLocal(STORAGE.startView, wallMode ? "wall" : "slides");
         if (dom.roleError) {
           dom.roleError.classList.add("hidden");
           dom.roleError.textContent = "";
         }
         role = payload.role;
         wallMode = payload.startView === "wall";
+        saveLocal(STORAGE.startView, wallMode ? "wall" : "slides");
         isAuthed = true;
         // honor server-selected profile for kiosk/video; admin can switch later
         if (payload.profileId) {

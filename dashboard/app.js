@@ -943,14 +943,11 @@
     const rows =
       users
         .map((u) => {
-          const profCount = (u.profiles || []).length;
           return `
           <tr>
             <td>${escapeHtml(u.username)}</td>
             <td>${escapeHtml(u.role)}</td>
             <td>${escapeHtml(u.startView || "slides")}</td>
-            <td>${escapeHtml(findProfileName(profiles, u.startProfileId))}</td>
-            <td>${profCount}</td>
             <td>
               <div class="admin-actions">
                 <button class="admin-action" data-action="user-edit" data-id="${u.id}">Edit</button>
@@ -960,19 +957,9 @@
           </tr>
         `;
         })
-        .join("") || `<tr><td colspan="6">No users yet.</td></tr>`;
+        .join("") || `<tr><td colspan="4">No users yet.</td></tr>`;
 
     const editing = adminState.draftUser;
-    const profileOptions = profiles
-      .map((p) => `<option value="${p.id}" ${editing?.startProfileId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
-      .join("");
-
-    const profileAssign = profiles
-      .map((p) => {
-        const checked = editing?.profiles?.includes(p.id) ? "checked" : "";
-        return `<label><input type="checkbox" data-role="user-profile" value="${p.id}" ${checked}/> ${escapeHtml(p.name)}</label>`;
-      })
-      .join("<br/>");
 
     dom.adminUsers.innerHTML = `
       <div class="admin-section-head">
@@ -983,7 +970,7 @@
       </div>
       <table class="admin-table">
         <thead>
-          <tr><th>User</th><th>Role</th><th>Start</th><th>Start Profile</th><th>Profiles</th><th></th></tr>
+          <tr><th>User</th><th>Role</th><th>Start View</th><th></th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -1012,17 +999,6 @@
                   <option value="slides" ${editing.startView === "slides" ? "selected" : ""}>Slides</option>
                   <option value="wall" ${editing.startView === "wall" ? "selected" : ""}>Overview Wall</option>
                 </select>
-              </div>
-              <div class="admin-field">
-                <label>Start profile</label>
-                <select data-role="user-start-profile">
-                  <option value="">(active default)</option>
-                  ${profileOptions}
-                </select>
-              </div>
-              <div class="admin-field">
-                <label>Profiles allowed</label>
-                <div class="admin-note">${profileAssign || "No profiles found"}</div>
               </div>
               <div class="admin-actions">
                 <button class="admin-action" data-action="user-save">${editing.id ? "Update" : "Create"}</button>
@@ -1216,11 +1192,6 @@
       adminState.draftUser.startView = target.value;
       return;
     }
-    if (target.dataset.role === "user-start-profile" && adminState.draftUser) {
-      adminState.draftUser.startProfileId = target.value;
-      return;
-    }
-
     if (target.dataset.role === "slide-name") {
       const index = toInt(target.dataset.slideIndex, -1);
       if (index < 0) return;
@@ -1289,8 +1260,8 @@
     const password = cleanText(form.querySelector("[data-role='user-password']")?.value, "");
     const role = cleanText(form.querySelector("[data-role='user-role']")?.value, "video");
     const startView = cleanText(form.querySelector("[data-role='user-start-view']")?.value, "slides");
-    const startProfileId = cleanText(form.querySelector("[data-role='user-start-profile']")?.value, "");
-    const profiles = Array.from(form.querySelectorAll("[data-role='user-profile']:checked")).map((el) => el.value);
+    const startProfileId = "";
+    const profiles = [];
 
     if (!username || !role) return;
 
@@ -1298,7 +1269,7 @@
       username,
       role,
       startView,
-      startProfileId: startProfileId || null,
+      startProfileId: null,
       profiles,
     };
     if (password) payload.password = password;

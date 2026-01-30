@@ -141,6 +141,13 @@ Default (recommended): the dashboard uses the same-origin `/api` proxy handled b
 - API offline: check `docker compose ps` and `/camdash-api/health`.
 - HLS unsupported: ensure Hls.js loads or use Safari/native HLS.
 
+## Known limitations / TODO
+- Passwords are plaintext; add hashing and stronger auth if exposing to untrusted networks.
+- No CSRF protection (token in Authorization header; keep as-is or move to HttpOnly cookie with CSRF token).
+- No per-camera recording links yet.
+- No WebRTC fallback; HLS only.
+- Upgrade HTTP -> HTTPS (terminate TLS at nginx).
+
 ## Security note
 Auth is disabled unless `CAMDASH_ADMIN_USER` and `CAMDASH_ADMIN_PASS` are set. The Docker Compose defaults set them, so change those values before exposing CamDash outside a trusted network.
 

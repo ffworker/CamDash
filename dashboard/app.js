@@ -560,7 +560,8 @@
     document.body.classList.toggle("role-priv", role === "priv");
     document.body.classList.toggle("role-admin", role === "admin");
 
-    const showAdmin = role === "admin" && config.ui.adminEnabled && config.dataSource.mode === "remote";
+    // Always show admin button for admin role when remote mode is enabled.
+    const showAdmin = role === "admin" && config.dataSource.mode === "remote";
     setVisible(dom.adminBtn, showAdmin);
 
     const showWall = role === "priv" || role === "admin";

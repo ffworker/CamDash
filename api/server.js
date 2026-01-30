@@ -874,8 +874,10 @@ app.delete("/profiles/:id", async (req, res) => {
 
     const activeProfileId = await getActiveProfileId();
     if (activeProfileId === id) {
-      res.status(400).json({ error: "cannot_delete_active_profile" });
-      return;
+      const fallback = await db.get("SELECT id FROM profiles WHERE id <> ? ORDER BY created_at LIMIT 1", [id]);
+      if (fallback && fallback.id) {
+        await setActiveProfileId(fallback.id);
+      }
     }
 
     const result = await db.run("DELETE FROM profiles WHERE id = ?", [id]);

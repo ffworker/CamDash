@@ -518,16 +518,19 @@
           dom.roleError.textContent = "";
         }
         role = payload.role;
-        wallMode = role === "priv" || role === "admin";
+        wallMode = payload.startView === "wall";
         isAuthed = true;
-        if (role === "kiosk" && payload.profileId) {
+        // honor server-selected profile for kiosk/video; admin can switch later
+        if (payload.profileId) {
           roleProfileId = payload.profileId;
           saveLocal(STORAGE.roleProfile, roleProfileId);
-        } else if (role !== "kiosk") {
+        }
+        if (role !== "kiosk" && !payload.profileId) {
           roleProfileId = "";
         }
         applyRoleUi();
         toggleRoleOverlay(false);
+        pageIndex = 0;
         render();
         if (wallMode) stopCycle();
         else scheduleCycle(true);
@@ -1385,12 +1388,13 @@
 
   async function deleteProfile(id) {
     try {
-      await apiFetch(`/profiles/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`/profiles/${id}`, { method: "DELETE" });
       await refreshRemoteState(true);
       adminState.selectedProfileId = null;
       renderAdmin();
     } catch (err) {
-      alert("Failed to delete profile.");
+      const msg = err?.message || err?.error || "Failed to delete profile.";
+      alert(msg);
     }
   }
 

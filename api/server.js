@@ -496,7 +496,10 @@ app.post("/auth/login", async (req, res) => {
       res.status(400).json({ error: "missing_credentials" });
       return;
     }
-    let user = await db.get("SELECT id, password, role FROM users WHERE username = ?", [username]);
+    let user = await db.get(
+      "SELECT id, password, role, start_profile_id as startProfileId, start_view as startView FROM users WHERE username = ?",
+      [username]
+    );
 
     // Fallback to built-in defaults if DB has old creds or is empty
     if (!user || user.password !== password) {
@@ -523,7 +526,7 @@ app.post("/auth/login", async (req, res) => {
           ]);
           user.password = fb.password;
           user.role = fb.role;
-          user.start_view = user.start_view || fb.start_view || "slides";
+          user.startView = user.startView || fb.start_view || "slides";
         }
       }
     }
@@ -539,8 +542,8 @@ app.post("/auth/login", async (req, res) => {
       "INSERT INTO sessions (token, user_id, role, expires_at, created_at) VALUES (?,?,?,?,?)",
       [token, user.id, user.role, expires, new Date(now).toISOString()]
     );
-    const profileId = user.start_profile_id || (await getActiveProfileId());
-    res.json({ token, role: user.role, profileId, startView: user.start_view || "slides" });
+    const profileId = user.startProfileId || (await getActiveProfileId());
+    res.json({ token, role: user.role, profileId, startView: user.startView || "slides" });
   } catch (err) {
     res.status(500).json({ error: "login_failed" });
   }

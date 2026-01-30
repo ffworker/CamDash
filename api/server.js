@@ -25,6 +25,19 @@ const FALLBACK_CREDS = {
   kiosk: { username: "kiosk", password: "kiosk", role: "kiosk" },
 };
 
+const ROLE_PERMS = {
+  admin: { canAdmin: true, canOverview: true, canSlides: true },
+  video: { canAdmin: false, canOverview: true, canSlides: true },
+  kiosk: { canAdmin: false, canOverview: false, canSlides: true },
+};
+
+function requireAdmin(req, res, next) {
+  if (req.role === "admin") return next();
+  const ok = isAuthorized(req) && ADMIN_USER && ADMIN_PASS;
+  if (ok) return next();
+  return unauthorized(res);
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
@@ -64,6 +77,20 @@ async function getSessionRoleFromHeader(header) {
   return row.role || null;
 }
 
+async function getSession(header) {
+  if (!header || !header.startsWith("Bearer ")) return null;
+  const token = header.slice(7).trim();
+  if (!token) return null;
+  const now = Date.now();
+  const row = await db.get("SELECT token, user_id, role, expires_at FROM sessions WHERE token = ?", [token]);
+  if (!row) return null;
+  if (row.expires_at && row.expires_at < now) {
+    await db.run("DELETE FROM sessions WHERE token = ?", [token]);
+    return null;
+  }
+  return row;
+}
+
 app.use(async (req, res, next) => {
   if (req.method === "OPTIONS") return next();
   if (req.path.startsWith("/auth")) return next();
@@ -71,9 +98,10 @@ app.use(async (req, res, next) => {
   // Bearer session token support
   if (db) {
     try {
-      const role = await getSessionRoleFromHeader(req.headers.authorization);
-      if (role) {
-        req.role = role;
+      const session = await getSession(req.headers.authorization);
+      if (session) {
+        req.role = session.role;
+        req.session = session;
         return next();
       }
     } catch (_) {
@@ -135,7 +163,10 @@ async function initDb() {
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('admin','video','kiosk')),
-      created_at TEXT NOT NULL
+      start_profile_id TEXT,
+      start_view TEXT DEFAULT 'slides', -- 'slides' | 'wall'
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(start_profile_id) REFERENCES profiles(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -145,6 +176,14 @@ async function initDb() {
       expires_at INTEGER NOT NULL,
       created_at TEXT NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_profiles (
+      user_id TEXT NOT NULL,
+      profile_id TEXT NOT NULL,
+      PRIMARY KEY (user_id, profile_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
     );
   `);
 
@@ -173,16 +212,17 @@ async function seedUsers() {
   if (row && row.count > 0) return;
   const now = new Date().toISOString();
   const defaults = [
-    { username: "admin", password: "29Logserv75", role: "admin" },
-    { username: "video", password: "bigbrother", role: "video" },
-    { username: "kiosk", password: "kiosk", role: "kiosk" },
+    { username: "admin", password: "29Logserv75", role: "admin", start_view: "wall" },
+    { username: "video", password: "bigbrother", role: "video", start_view: "wall" },
+    { username: "kiosk", password: "kiosk", role: "kiosk", start_view: "slides" },
   ];
   for (const u of defaults) {
-    await db.run("INSERT INTO users (id, username, password, role, created_at) VALUES (?,?,?,?,?)", [
+    await db.run("INSERT INTO users (id, username, password, role, start_view, created_at) VALUES (?,?,?,?,?,?)", [
       crypto.randomUUID(),
       u.username,
       u.password,
       u.role,
+      u.start_view || "slides",
       now,
     ]);
   }
@@ -239,6 +279,15 @@ function readStreams(filePath) {
   } catch (err) {
     return {};
   }
+}
+
+async function replaceUserProfiles(userId, profileIds) {
+  await db.run("DELETE FROM user_profiles WHERE user_id = ?", [userId]);
+  const stmt = await db.prepare("INSERT INTO user_profiles (user_id, profile_id) VALUES (?, ?)");
+  for (const pid of profileIds) {
+    await stmt.run(userId, pid);
+  }
+  await stmt.finalize();
 }
 
 function buildCameraMap(pages, streams) {
@@ -443,18 +492,25 @@ app.post("/auth/login", async (req, res) => {
         if (!user) {
           const nowIso = new Date().toISOString();
           const newId = crypto.randomUUID();
-          await db.run("INSERT INTO users (id, username, password, role, created_at) VALUES (?,?,?,?,?)", [
+          await db.run("INSERT INTO users (id, username, password, role, start_view, created_at) VALUES (?,?,?,?,?,?)", [
             newId,
             fb.username,
             fb.password,
             fb.role,
+            fb.start_view || "slides",
             nowIso,
           ]);
-          user = { id: newId, password: fb.password, role: fb.role };
+          user = { id: newId, password: fb.password, role: fb.role, start_view: fb.start_view || "slides" };
         } else {
-          await db.run("UPDATE users SET password = ?, role = ? WHERE id = ?", [fb.password, fb.role, user.id]);
+          await db.run("UPDATE users SET password = ?, role = ?, start_view = COALESCE(start_view, ?) WHERE id = ?", [
+            fb.password,
+            fb.role,
+            fb.start_view || "slides",
+            user.id,
+          ]);
           user.password = fb.password;
           user.role = fb.role;
+          user.start_view = user.start_view || fb.start_view || "slides";
         }
       }
     }
@@ -470,7 +526,8 @@ app.post("/auth/login", async (req, res) => {
       "INSERT INTO sessions (token, user_id, role, expires_at, created_at) VALUES (?,?,?,?,?)",
       [token, user.id, user.role, expires, new Date(now).toISOString()]
     );
-    res.json({ token, role: user.role, profileId: await getActiveProfileId() });
+    const profileId = user.start_profile_id || (await getActiveProfileId());
+    res.json({ token, role: user.role, profileId, startView: user.start_view || "slides" });
   } catch (err) {
     res.status(500).json({ error: "login_failed" });
   }
@@ -513,6 +570,120 @@ app.get("/state", async (_req, res) => {
     res.json(state);
   } catch (err) {
     res.status(500).json({ error: "failed_to_load_state" });
+  }
+});
+
+// --- Users CRUD (admin only) ---
+app.get("/users", requireAdmin, async (_req, res) => {
+  try {
+    const rows = await db.all(
+      "SELECT id, username, role, start_profile_id as startProfileId, start_view as startView, created_at as createdAt FROM users ORDER BY username"
+    );
+    const profileRows = await db.all("SELECT user_id, profile_id FROM user_profiles");
+    const map = new Map();
+    profileRows.forEach((r) => {
+      const list = map.get(r.user_id) || [];
+      list.push(r.profile_id);
+      map.set(r.user_id, list);
+    });
+    const payload = rows.map((u) => ({
+      ...u,
+      profiles: map.get(u.id) || [],
+    }));
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ error: "users_load_failed" });
+  }
+});
+
+app.post("/users", requireAdmin, async (req, res) => {
+  try {
+    const username = cleanText(req.body?.username);
+    const password = cleanText(req.body?.password);
+    const role = cleanText(req.body?.role);
+    const startView = cleanText(req.body?.startView, "slides");
+    const startProfileId = cleanText(req.body?.startProfileId, null);
+    const profiles = Array.isArray(req.body?.profiles) ? req.body.profiles.filter(Boolean) : [];
+
+    if (!username || !password || !role || !ROLE_PERMS[role]) {
+      res.status(400).json({ error: "invalid_fields" });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    await db.run(
+      "INSERT INTO users (id, username, password, role, start_profile_id, start_view, created_at) VALUES (?,?,?,?,?,?,?)",
+      [id, username, password, role, startProfileId, startView, now]
+    );
+    await replaceUserProfiles(id, profiles);
+
+    res.status(201).json({ id, username, role, startProfileId, startView, profiles });
+  } catch (err) {
+    if (err && err.code === "SQLITE_CONSTRAINT") {
+      res.status(409).json({ error: "username_taken" });
+      return;
+    }
+    res.status(500).json({ error: "user_create_failed" });
+  }
+});
+
+app.put("/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const existing = await db.get("SELECT id FROM users WHERE id = ?", [id]);
+    if (!existing) {
+      res.status(404).json({ error: "user_not_found" });
+      return;
+    }
+
+    const username = cleanText(req.body?.username);
+    const password = cleanText(req.body?.password, null);
+    const role = cleanText(req.body?.role);
+    const startView = cleanText(req.body?.startView, "slides");
+    const startProfileId = cleanText(req.body?.startProfileId, null);
+    const profiles = Array.isArray(req.body?.profiles) ? req.body.profiles.filter(Boolean) : [];
+
+    if (!username || !role || !ROLE_PERMS[role]) {
+      res.status(400).json({ error: "invalid_fields" });
+      return;
+    }
+
+    if (password) {
+      await db.run(
+        "UPDATE users SET username = ?, password = ?, role = ?, start_profile_id = ?, start_view = ? WHERE id = ?",
+        [username, password, role, startProfileId, startView, id]
+      );
+    } else {
+      await db.run(
+        "UPDATE users SET username = ?, role = ?, start_profile_id = ?, start_view = ? WHERE id = ?",
+        [username, role, startProfileId, startView, id]
+      );
+    }
+
+    await replaceUserProfiles(id, profiles);
+
+    res.json({ id, username, role, startProfileId, startView, profiles });
+  } catch (err) {
+    if (err && err.code === "SQLITE_CONSTRAINT") {
+      res.status(409).json({ error: "username_taken" });
+      return;
+    }
+    res.status(500).json({ error: "user_update_failed" });
+  }
+});
+
+app.delete("/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const result = await db.run("DELETE FROM users WHERE id = ?", [id]);
+    if (result.changes === 0) {
+      res.status(404).json({ error: "user_not_found" });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "user_delete_failed" });
   }
 });
 

@@ -41,6 +41,7 @@
     adminBody: document.getElementById("adminBody"),
     adminCameras: document.getElementById("adminCameras"),
     adminProfiles: document.getElementById("adminProfiles"),
+    adminUsers: document.getElementById("adminUsers"),
     roleOverlay: document.getElementById("roleOverlay"),
     roleForm: document.getElementById("roleForm"),
     roleUser: document.getElementById("roleUser"),
@@ -109,6 +110,10 @@
     draftSlides: null,
     draftProfileName: "",
     editingCameraId: null,
+    users: [],
+    profiles: [],
+    editingUserId: null,
+    draftUser: null,
   };
 
   const config = normalizeConfig(cfg);
@@ -327,8 +332,8 @@
       chosenProfileId = overrideId || chosenProfileId;
     } else if (role === "kiosk" && roleProfileId) {
       chosenProfileId = roleProfileId;
-    } else if (role === "priv") {
-      // no manual override for priv; stick to active profile
+    } else if (role === "priv" && roleProfileId) {
+      chosenProfileId = roleProfileId;
     }
 
     const activeProfile = profiles.find((profile) => profile.id === chosenProfileId) || profiles[0];
@@ -699,6 +704,7 @@
     }
 
     renderAdmin();
+    if (adminState.activeTab === "users") loadAdminUsers();
   }
 
   function renderAdmin() {
@@ -711,9 +717,11 @@
 
     renderCameraSection();
     renderProfileSection();
+    renderUserSection();
 
     setVisible(dom.adminCameras, adminState.activeTab === "cameras");
     setVisible(dom.adminProfiles, adminState.activeTab === "profiles");
+    setVisible(dom.adminUsers, adminState.activeTab === "users");
   }
 
   function renderCameraSection() {
@@ -930,6 +938,8 @@
         if (tab) {
           adminState.activeTab = tab;
           renderAdmin();
+          if (tab === "users") loadAdminUsers();
+          if (tab === "profiles") refreshAdminProfiles();
         }
       }
       return;

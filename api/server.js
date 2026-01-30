@@ -50,9 +50,38 @@ function unauthorized(res) {
   res.status(401).json({ error: "unauthorized" });
 }
 
-app.use((req, res, next) => {
+async function getSessionRoleFromHeader(header) {
+  if (!header || !header.startsWith("Bearer ")) return null;
+  const token = header.slice(7).trim();
+  if (!token) return null;
+  const now = Date.now();
+  const row = await db.get("SELECT role, expires_at FROM sessions WHERE token = ?", [token]);
+  if (!row) return null;
+  if (row.expires_at && row.expires_at < now) {
+    await db.run("DELETE FROM sessions WHERE token = ?", [token]);
+    return null;
+  }
+  return row.role || null;
+}
+
+app.use(async (req, res, next) => {
   if (req.method === "OPTIONS") return next();
-  if (req.method === "GET" && req.path !== "/auth") return next();
+  if (req.path.startsWith("/auth")) return next();
+
+  // Bearer session token support
+  if (db) {
+    try {
+      const role = await getSessionRoleFromHeader(req.headers.authorization);
+      if (role) {
+        req.role = role;
+        return next();
+      }
+    } catch (_) {
+      // fall through to basic auth
+    }
+  }
+
+  // Basic auth fallback
   if (!isAuthorized(req)) return unauthorized(res);
   return next();
 });

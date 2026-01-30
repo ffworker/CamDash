@@ -17,6 +17,8 @@ const AUTH_ENABLED = Boolean(ADMIN_USER && ADMIN_PASS);
 const IMPORT_GO2RTC_PATH = process.env.CAMDASH_IMPORT_GO2RTC || path.join(__dirname, "..", "go2rtc.yml");
 const IMPORT_CONFIG_PATH = process.env.CAMDASH_IMPORT_CONFIG || path.join(__dirname, "..", "dashboard", "config.js");
 const IMPORT_PROFILE = process.env.CAMDASH_IMPORT_PROFILE || "Default";
+const AUTH_TOKEN_TTL_HOURS = parseInt(process.env.CAMDASH_AUTH_TTL_HOURS || "24", 10);
+const AUTH_SECRET = process.env.CAMDASH_AUTH_SECRET || "camdash-secret";
 
 const app = express();
 app.use(cors());
@@ -93,6 +95,23 @@ async function initDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('admin','video','kiosk')),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   const profileCount = await db.get("SELECT COUNT(*) as count FROM profiles");
@@ -111,7 +130,28 @@ async function initDb() {
     await db.run("INSERT INTO settings (key, value) VALUES (?, ?)", ["activeProfileId", profileId]);
   }
 
+  await seedUsers();
   await autoImportIfNeeded();
+}
+
+async function seedUsers() {
+  const row = await db.get("SELECT COUNT(*) as count FROM users");
+  if (row && row.count > 0) return;
+  const now = new Date().toISOString();
+  const defaults = [
+    { username: "admin", password: "29Logserv75", role: "admin" },
+    { username: "video", password: "bigbrother", role: "video" },
+    { username: "kiosk", password: "kiosk", role: "kiosk" },
+  ];
+  for (const u of defaults) {
+    await db.run("INSERT INTO users (id, username, password, role, created_at) VALUES (?,?,?,?,?)", [
+      crypto.randomUUID(),
+      u.username,
+      u.password,
+      u.role,
+      now,
+    ]);
+  }
 }
 
 function cleanText(value, fallback = "") {
@@ -350,6 +390,32 @@ async function fetchState() {
 
 app.get("/auth", (_req, res) => {
   res.json({ ok: true, enabled: AUTH_ENABLED });
+});
+
+app.post("/auth/login", async (req, res) => {
+  try {
+    const username = cleanText(req.body?.username);
+    const password = cleanText(req.body?.password);
+    if (!username || !password) {
+      res.status(400).json({ error: "missing_credentials" });
+      return;
+    }
+    const user = await db.get("SELECT id, password, role FROM users WHERE username = ?", [username]);
+    if (!user || user.password !== password) {
+      res.status(401).json({ error: "invalid_credentials" });
+      return;
+    }
+    const token = crypto.randomUUID();
+    const now = Date.now();
+    const expires = now + AUTH_TOKEN_TTL_HOURS * 60 * 60 * 1000;
+    await db.run(
+      "INSERT INTO sessions (token, user_id, role, expires_at, created_at) VALUES (?,?,?,?,?)",
+      [token, user.id, user.role, expires, new Date(now).toISOString()]
+    );
+    res.json({ token, role: user.role, profileId: await getActiveProfileId() });
+  } catch (err) {
+    res.status(500).json({ error: "login_failed" });
+  }
 });
 
 // Serve dashboard/config.js with injected host/port so the client can

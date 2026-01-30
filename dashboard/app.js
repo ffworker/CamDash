@@ -7,11 +7,6 @@
   "use strict";
 
   const cfg = window.CAMDASH_CONFIG || {};
-  const ROLE_CREDS = {
-    admin: { user: "admin", pass: "29Logserv75" },
-    priv: { user: "video", pass: "bigbrother" },
-    kiosk: { user: "kiosk", pass: "kiosk" },
-  };
 
   const dom = {
     grid: document.getElementById("grid"),
@@ -102,6 +97,7 @@
     timer: "camdash.timer",
     page: "camdash.page",
     roleProfile: "camdash.roleProfile",
+    token: "camdash.token",
   };
   const PROFILE_QUERY_KEYS = ["profile", "profileId"];
   const AUTH_STORAGE_KEY = "camdash.adminAuth";
@@ -134,6 +130,7 @@
   let liveHls = null;
   let isAuthed = false;
   let liveStateLabel = null;
+  let authToken = loadLocal(STORAGE.token) || "";
 
   init().catch((err) => {
     console.error("CamDash init failed", err);
@@ -498,42 +495,44 @@
     const pass = cleanText(dom.rolePass?.value);
     if (!user || !pass) return;
 
-    let matchedRole = null;
-    Object.entries(ROLE_CREDS).forEach(([r, cred]) => {
-      if (user === cred.user && pass === cred.pass) matchedRole = r;
-    });
-
-    if (!matchedRole) {
-      if (dom.roleError) {
-        dom.roleError.textContent = "Falscher Benutzer oder Passwort";
-        dom.roleError.classList.remove("hidden");
-      }
-      return;
-    }
-    if (dom.roleError) {
-      dom.roleError.classList.add("hidden");
-      dom.roleError.textContent = "";
-    }
-
-    role = matchedRole;
-    wallMode = role === "priv" || role === "admin";
-    isAuthed = true;
-
-    // Kiosk sticks to active profile; others use active, admin can switch via admin UI
-    if (role === "kiosk" && dataState?.activeProfileId) {
-      roleProfileId = dataState.activeProfileId;
-    } else if (role !== "kiosk") {
-      roleProfileId = "";
-    }
-
-    applyRoleUi();
-    toggleRoleOverlay(false);
-    render();
-    if (wallMode) {
-      stopCycle();
-    } else {
-      scheduleCycle(true);
-    }
+    fetch(`${config.dataSource.apiBase}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: user, password: pass }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("invalid");
+        return res.json();
+      })
+      .then((payload) => {
+        if (!payload || !payload.token || !payload.role) throw new Error("invalid");
+        authToken = payload.token;
+        saveLocal(STORAGE.token, authToken);
+        if (dom.roleError) {
+          dom.roleError.classList.add("hidden");
+          dom.roleError.textContent = "";
+        }
+        role = payload.role;
+        wallMode = role === "priv" || role === "admin";
+        isAuthed = true;
+        if (role === "kiosk" && payload.profileId) {
+          roleProfileId = payload.profileId;
+          saveLocal(STORAGE.roleProfile, roleProfileId);
+        } else if (role !== "kiosk") {
+          roleProfileId = "";
+        }
+        applyRoleUi();
+        toggleRoleOverlay(false);
+        render();
+        if (wallMode) stopCycle();
+        else scheduleCycle(true);
+      })
+      .catch(() => {
+        if (dom.roleError) {
+          dom.roleError.textContent = "Falscher Benutzer oder Passwort";
+          dom.roleError.classList.remove("hidden");
+        }
+      });
   }
 
   function applyRoleUi() {
@@ -1264,7 +1263,9 @@
 
   async function fetchState() {
     try {
-      const res = await fetch(`${config.dataSource.apiBase}/state`, { cache: "no-store" });
+      const headers = {};
+      if (authToken) headers.Authorization = `Bearer ${authToken}`;
+      const res = await fetch(`${config.dataSource.apiBase}/state`, { cache: "no-store", headers });
       if (!res.ok) return null;
       return await res.json();
     } catch (err) {
@@ -1274,6 +1275,7 @@
 
   async function apiFetch(path, options) {
     const headers = { "Content-Type": "application/json" };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
     if (adminAuthHeader) headers.Authorization = adminAuthHeader;
 
     const res = await fetch(`${config.dataSource.apiBase}${path}`, {

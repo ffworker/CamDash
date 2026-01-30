@@ -603,6 +603,11 @@
   }
 
   async function ensureAdminAccess() {
+    if (role === "admin" && authToken) {
+      showAdminAuth(false);
+      return true;
+    }
+
     const status = await checkAdminAuth();
     if (status.ok) {
       showAdminAuth(false);
@@ -693,6 +698,12 @@
     adminState.open = true;
     setVisible(dom.adminOverlay, true);
     dom.adminOverlay.setAttribute("aria-hidden", "false");
+
+    if (role !== "admin") {
+      alert("Admin access only.");
+      toggleAdmin(false);
+      return;
+    }
 
     if (!dataState) {
       await refreshRemoteState(true);
@@ -916,6 +927,109 @@
     `;
   }
 
+  function renderUserSection() {
+    if (!dom.adminUsers) return;
+    if (!dataState) {
+      dom.adminUsers.innerHTML = `<div class="admin-note">API offline.</div>`;
+      return;
+    }
+
+    const profiles = Array.isArray(dataState.profiles) ? dataState.profiles : [];
+    const users = Array.isArray(adminState.users) ? adminState.users : [];
+    const rows =
+      users
+        .map((u) => {
+          const profCount = (u.profiles || []).length;
+          return `
+          <tr>
+            <td>${escapeHtml(u.username)}</td>
+            <td>${escapeHtml(u.role)}</td>
+            <td>${escapeHtml(u.startView || "slides")}</td>
+            <td>${escapeHtml(findProfileName(profiles, u.startProfileId))}</td>
+            <td>${profCount}</td>
+            <td>
+              <div class="admin-actions">
+                <button class="admin-action" data-action="user-edit" data-id="${u.id}">Edit</button>
+                <button class="admin-action" data-action="user-delete" data-id="${u.id}">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `;
+        })
+        .join("") || `<tr><td colspan="6">No users yet.</td></tr>`;
+
+    const editing = adminState.draftUser;
+    const profileOptions = profiles
+      .map((p) => `<option value="${p.id}" ${editing?.startProfileId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
+      .join("");
+
+    const profileAssign = profiles
+      .map((p) => {
+        const checked = editing?.profiles?.includes(p.id) ? "checked" : "";
+        return `<label><input type="checkbox" data-role="user-profile" value="${p.id}" ${checked}/> ${escapeHtml(p.name)}</label>`;
+      })
+      .join("<br/>");
+
+    dom.adminUsers.innerHTML = `
+      <div class="admin-section-head">
+        <div class="admin-section-title">Users</div>
+        <div class="admin-actions">
+          <button class="admin-action" data-action="user-new">New user</button>
+        </div>
+      </div>
+      <table class="admin-table">
+        <thead>
+          <tr><th>User</th><th>Role</th><th>Start</th><th>Start Profile</th><th>Profiles</th><th></th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${
+        editing
+          ? `<div class="admin-form full" id="userForm" data-id="${editing.id || ""}">
+              <div class="admin-field">
+                <label>Username</label>
+                <input data-role="user-username" value="${escapeHtml(editing.username || "")}" required/>
+              </div>
+              <div class="admin-field">
+                <label>Password${editing.id ? " (leave blank to keep)" : ""}</label>
+                <input data-role="user-password" type="password" value=""/>
+              </div>
+              <div class="admin-field">
+                <label>Role</label>
+                <select data-role="user-role">
+                  ${["admin", "video", "kiosk"]
+                    .map((r) => `<option value="${r}" ${editing.role === r ? "selected" : ""}>${r}</option>`)
+                    .join("")}
+                </select>
+              </div>
+              <div class="admin-field">
+                <label>Start view</label>
+                <select data-role="user-start-view">
+                  <option value="slides" ${editing.startView === "slides" ? "selected" : ""}>Slides</option>
+                  <option value="wall" ${editing.startView === "wall" ? "selected" : ""}>Overview Wall</option>
+                </select>
+              </div>
+              <div class="admin-field">
+                <label>Start profile</label>
+                <select data-role="user-start-profile">
+                  <option value="">(active default)</option>
+                  ${profileOptions}
+                </select>
+              </div>
+              <div class="admin-field">
+                <label>Profiles allowed</label>
+                <div class="admin-note">${profileAssign || "No profiles found"}</div>
+              </div>
+              <div class="admin-actions">
+                <button class="admin-action" data-action="user-save">${editing.id ? "Update" : "Create"}</button>
+                <button class="admin-action" data-action="user-cancel">Cancel</button>
+              </div>
+            </div>`
+          : ""
+      }
+    `;
+  }
+
   function buildCameraOptions(cameras) {
     const list = Array.isArray(cameras) ? cameras : [];
     const options = list.map((cam) => {
@@ -927,6 +1041,12 @@
       options
         .map((opt) => `<option value="${opt.id}" ${opt.id === selectedId ? "selected" : ""}>${opt.label}</option>`)
         .join("");
+  }
+
+  function findProfileName(profiles, id) {
+    if (!id) return "";
+    const p = Array.isArray(profiles) ? profiles.find((x) => x.id === id) : null;
+    return p ? p.name || "" : "";
   }
 
   function handleAdminClick(event) {
@@ -1019,6 +1139,32 @@
       return;
     }
 
+    if (action === "user-new") {
+      startEditUser(null);
+      return;
+    }
+    if (action === "user-edit") {
+      startEditUser(actionEl.dataset.id);
+      return;
+    }
+    if (action === "user-delete") {
+      const id = actionEl.dataset.id;
+      if (!id) return;
+      if (!confirm("Delete this user?")) return;
+      deleteUser(id);
+      return;
+    }
+    if (action === "user-save") {
+      saveUser();
+      return;
+    }
+    if (action === "user-cancel") {
+      adminState.draftUser = null;
+      adminState.editingUserId = null;
+      renderUserSection();
+      return;
+    }
+
     if (action === "profile-name-save") {
       const id = actionEl.dataset.id;
       if (!id) return;
@@ -1050,6 +1196,27 @@
       return;
     }
 
+    if (target.dataset.role === "user-username" && adminState.draftUser) {
+      adminState.draftUser.username = target.value;
+      return;
+    }
+    if (target.dataset.role === "user-password" && adminState.draftUser) {
+      adminState.draftUser.password = target.value;
+      return;
+    }
+    if (target.dataset.role === "user-role" && adminState.draftUser) {
+      adminState.draftUser.role = target.value;
+      return;
+    }
+    if (target.dataset.role === "user-start-view" && adminState.draftUser) {
+      adminState.draftUser.startView = target.value;
+      return;
+    }
+    if (target.dataset.role === "user-start-profile" && adminState.draftUser) {
+      adminState.draftUser.startProfileId = target.value;
+      return;
+    }
+
     if (target.dataset.role === "slide-name") {
       const index = toInt(target.dataset.slideIndex, -1);
       if (index < 0) return;
@@ -1069,6 +1236,90 @@
       if (!slide) return;
       if (!Array.isArray(slide.cameraIds)) slide.cameraIds = [];
       slide.cameraIds[slot] = target.value || null;
+      return;
+    }
+
+    if (target.dataset.role === "user-profile" && adminState.draftUser) {
+      const value = target.value;
+      const list = new Set(adminState.draftUser.profiles || []);
+      if (target.checked) list.add(value);
+      else list.delete(value);
+      adminState.draftUser.profiles = Array.from(list);
+      return;
+    }
+  }
+
+  async function loadAdminUsers() {
+    try {
+      const res = await apiFetch("/users", { method: "GET" });
+      adminState.users = Array.isArray(res) ? res : [];
+      adminState.draftUser = null;
+      adminState.editingUserId = null;
+      renderUserSection();
+    } catch (_) {
+      if (dom.adminUsers) dom.adminUsers.innerHTML = `<div class="admin-note">Failed to load users.</div>`;
+    }
+  }
+
+  function startEditUser(id) {
+    const users = Array.isArray(adminState.users) ? adminState.users : [];
+    const existing = users.find((u) => u.id === id);
+    adminState.editingUserId = id || null;
+    adminState.draftUser =
+      existing || {
+        id: null,
+        username: "",
+        role: "video",
+        startView: "slides",
+        startProfileId: "",
+        profiles: [],
+      };
+    renderUserSection();
+  }
+
+  async function saveUser() {
+    if (!dom.adminUsers) return;
+    const form = dom.adminUsers.querySelector("#userForm");
+    if (!form) return;
+    const username = cleanText(form.querySelector("[data-role='user-username']")?.value);
+    const password = cleanText(form.querySelector("[data-role='user-password']")?.value, "");
+    const role = cleanText(form.querySelector("[data-role='user-role']")?.value, "video");
+    const startView = cleanText(form.querySelector("[data-role='user-start-view']")?.value, "slides");
+    const startProfileId = cleanText(form.querySelector("[data-role='user-start-profile']")?.value, "");
+    const profiles = Array.from(form.querySelectorAll("[data-role='user-profile']:checked")).map((el) => el.value);
+
+    if (!username || !role) return;
+
+    const payload = {
+      username,
+      role,
+      startView,
+      startProfileId: startProfileId || null,
+      profiles,
+    };
+    if (password) payload.password = password;
+
+    const id = adminState.editingUserId;
+    try {
+      if (id) {
+        await apiFetch(`/users/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+      } else {
+        await apiFetch("/users", { method: "POST", body: JSON.stringify({ ...payload, password: password || "changeme" }) });
+      }
+      adminState.draftUser = null;
+      adminState.editingUserId = null;
+      await loadAdminUsers();
+    } catch (_) {
+      alert("Failed to save user");
+    }
+  }
+
+  async function deleteUser(id) {
+    try {
+      await apiFetch(`/users/${id}`, { method: "DELETE" });
+      await loadAdminUsers();
+    } catch (_) {
+      alert("Failed to delete user");
     }
   }
   async function saveCamera(form) {

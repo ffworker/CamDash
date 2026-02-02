@@ -127,7 +127,7 @@
   let maxCamsPerSlide = 6;
   let seconds = config.defaultSeconds;
   let pageIndex = 0;
-  let hlsInstances = [];
+  let tilePcs = [];
   let cleanupFns = [];
   let cycleHandle = null;
   let pagesSignature = "";
@@ -136,7 +136,6 @@
   let wallMode = loadLocal(STORAGE.startView) === "wall";
   let snapshotTimer = null;
   let snapshotsPaused = false;
-  let liveHls = null;
   let livePc = null;
   let isAuthed = false;
   let liveStateLabel = null;
@@ -1733,19 +1732,9 @@
     video.playsInline = true;
     video.preload = "auto";
 
-    const src = hlsUrl(id);
-
     const markOk = () => {
       if (state) state.textContent = config.ui.labels.ok;
       if (ping) ping.classList.remove("err", "warn");
-    };
-
-    const markWarn = (msg) => {
-      if (state) state.textContent = msg || config.ui.labels.buffer;
-      if (ping) {
-        ping.classList.remove("err");
-        ping.classList.add("warn");
-      }
     };
 
     const markFatal = (msg) => {
@@ -1756,53 +1745,19 @@
       }
     };
 
-    const HLS = window.Hls;
-    if (HLS && HLS.isSupported()) {
-      const hls = new HLS(config.hls);
-
-      hls.on(HLS.Events.MANIFEST_PARSED, markOk);
-      hls.on(HLS.Events.FRAG_LOADED, markOk);
-
-      hls.on(HLS.Events.ERROR, (_evt, data) => {
-        if (!data) return;
-        if (!data.fatal) {
-          if (data.details === HLS.ErrorDetails.BUFFER_STALLED_ERROR) {
-            markWarn();
-          }
-          return;
-        }
-
-        const details = data.details ? `err: ${data.details}` : config.ui.labels.fatal;
-        markFatal(details);
-
-        try {
-          if (data.type === HLS.ErrorTypes.MEDIA_ERROR) {
-            hls.recoverMediaError();
-          } else {
-            hls.destroy();
-          }
-        } catch (_) {
-          try { hls.destroy(); } catch {}
-        }
-      });
-
-      hls.loadSource(src);
-      hls.attachMedia(video);
-      hlsInstances.push(hls);
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = src;
-      video.addEventListener("playing", markOk, { once: false });
-      video.addEventListener("waiting", () => markWarn(), { once: false });
-      video.addEventListener("error", () => markFatal("video"), { once: false });
-    } else {
-      markFatal(config.ui.labels.unsupported);
-    }
+    playWebrtc(video, webrtcUrl(id), tilePcs)
+      .then((ok) => {
+        if (ok) markOk();
+        else markFatal("webrtc");
+      })
+      .catch(() => markFatal("webrtc"));
 
     cleanupFns.push(() => {
       try {
         video.pause();
         video.removeAttribute("src");
         video.load();
+        video.srcObject = null;
       } catch (_) {}
     });
 
@@ -1810,11 +1765,6 @@
     if (config.ui.showLiveBadge) tile.appendChild(corner);
     return tile;
   }
-  function hlsUrl(streamId) {
-    const base = config.go2rtcBase;
-    return `${base}/api/stream.m3u8?src=${encodeURIComponent(streamId)}`;
-  }
-
   function webrtcUrl(streamId) {
     const base = config.go2rtcBase;
     return `${base}/api/webrtc?src=${encodeURIComponent(streamId)}`;
@@ -1826,12 +1776,17 @@
     return `${base}/api/frame.jpeg?${qs}`;
   }
 
-  async function playWebrtc(video, apiUrl) {
+  async function playWebrtc(video, apiUrl, store) {
     if (typeof RTCPeerConnection === "undefined") return false;
 
+    let pc = null;
     try {
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      livePc = pc;
+      pc = new RTCPeerConnection({ iceServers: [] });
+      if (store === "live") {
+        livePc = pc;
+      } else if (Array.isArray(store)) {
+        store.push(pc);
+      }
 
       const mediaStream = new MediaStream();
       pc.ontrack = (evt) => {
@@ -1862,13 +1817,15 @@
       const ok = await waitForWebrtc(pc, 5000);
       if (!ok) throw new Error("webrtc timeout");
 
-      dom.liveState.textContent = "live (WebRTC)";
+      if (store === "live" && dom.liveState) {
+        dom.liveState.textContent = "live (WebRTC)";
+      }
       return true;
     } catch (err) {
-      if (livePc) {
-        try { livePc.close(); } catch (_) {}
-        livePc = null;
+      if (pc) {
+        try { pc.close(); } catch (_) {}
       }
+      if (store === "live") livePc = null;
       return false;
     }
   }
@@ -1895,77 +1852,6 @@
         }
       };
     });
-  }
-
-  async function playHls(video, src) {
-    const HLS = window.Hls;
-    if (liveHls) {
-      try { liveHls.destroy(); } catch (_) {}
-      liveHls = null;
-    }
-
-    if (HLS && HLS.isSupported()) {
-      return await new Promise((resolve) => {
-        const hls = new HLS(config.hls);
-        liveHls = hls;
-        let settled = false;
-
-        const finish = (ok) => {
-          if (settled) return;
-          settled = true;
-          resolve(ok);
-        };
-
-        hls.on(HLS.Events.MANIFEST_PARSED, () => {
-          dom.liveState.textContent = "live (HLS)";
-          setTimeout(() => video.play().catch(() => {}), 30);
-          finish(true);
-        });
-        hls.on(HLS.Events.ERROR, (_evt, data) => {
-          if (data?.fatal) {
-            dom.liveState.textContent = "hls error";
-            try { hls.destroy(); } catch (_) {}
-            liveHls = null;
-            finish(false);
-          }
-        });
-
-        hls.loadSource(src);
-        hls.attachMedia(video);
-
-        setTimeout(() => finish(false), 6000);
-      });
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      return await new Promise((resolve) => {
-        let settled = false;
-        const finish = (ok) => {
-          if (settled) return;
-          settled = true;
-          resolve(ok);
-        };
-        video.src = src;
-        video.addEventListener(
-          "playing",
-          () => {
-            dom.liveState.textContent = "live (HLS)";
-            finish(true);
-          },
-          { once: true }
-        );
-        video.addEventListener(
-          "error",
-          () => {
-            dom.liveState.textContent = "hls error";
-            finish(false);
-          },
-          { once: true }
-        );
-        video.play().catch(() => {});
-        setTimeout(() => finish(false), 6000);
-      });
-    }
-    dom.liveState.textContent = "HLS unsupported";
-    return false;
   }
 
   function startSnapshotRefresh() {
@@ -2002,13 +1888,15 @@
         dom.liveVideo.srcObject = null;
       } catch (_) {}
     }
-    if (liveHls) {
-      try { liveHls.destroy(); } catch (_) {}
-      liveHls = null;
-    }
     if (livePc) {
       try { livePc.close(); } catch (_) {}
       livePc = null;
+    }
+    if (tilePcs && tilePcs.length) {
+      tilePcs.forEach((pc) => {
+        try { pc.close(); } catch (_) {}
+      });
+      tilePcs = [];
     }
   }
 
@@ -2036,16 +1924,12 @@
     video.muted = true;
     video.autoplay = true;
     const streamId = cam.source || cam.id;
-    const hlsSrc = hlsUrl(streamId);
 
     destroyLivePlayers();
 
     // Prefer WebRTC for lower latency; fall back to HLS.
-    const webrtcOk = await playWebrtc(video, webrtcUrl(streamId));
+    const webrtcOk = await playWebrtc(video, webrtcUrl(streamId), "live");
     if (webrtcOk) return;
-
-    const hlsOk = await playHls(video, hlsSrc);
-    if (hlsOk) return;
 
     dom.liveState.textContent = "error";
   }

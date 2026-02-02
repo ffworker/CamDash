@@ -377,14 +377,12 @@
   function initControls() {
     if (dom.prevBtn) {
       dom.prevBtn.addEventListener("click", () => {
-        if (role !== "admin") return;
         setPage(pageIndex - 1);
       });
     }
 
     if (dom.nextBtn) {
       dom.nextBtn.addEventListener("click", () => {
-        if (role !== "admin") return;
         setPage(pageIndex + 1);
       });
     }
@@ -405,11 +403,11 @@
         return;
       }
 
-      if (role === "admin" && e.key === "ArrowLeft") {
+      if (e.key === "ArrowLeft") {
         setPage(pageIndex - 1);
-      } else if (role === "admin" && e.key === "ArrowRight") {
+      } else if (e.key === "ArrowRight") {
         setPage(pageIndex + 1);
-      } else if (config.autoCycle && role === "admin") {
+      } else if (config.autoCycle) {
         if (e.key === "1") setTimer(30);
         if (e.key === "2") setTimer(60);
         if (e.key === "3") setTimer(90);
@@ -962,7 +960,7 @@
     `;
   }
 
-  function renderUserSection() {
+function renderUserSection() {
     if (!dom.adminUsers) return;
     if (!dataState) {
       dom.adminUsers.innerHTML = `<div class="admin-note">API offline.</div>`;
@@ -971,14 +969,24 @@
 
     const profiles = Array.isArray(dataState.profiles) ? dataState.profiles : [];
     const users = Array.isArray(adminState.users) ? adminState.users : [];
+    const profileSelect = (selectedId) =>
+      ['<option value="">(active profile)</option>']
+        .concat(
+          profiles.map(
+            (p) =>
+              `<option value="${p.id}" ${p.id === selectedId ? "selected" : ""}>${escapeHtml(p.name || "Profile")}</option>`
+          )
+        )
+        .join("");
     const rows =
       users
         .map((u) => {
+          const startProfileName = findProfileName(profiles, u.startProfileId) || "(active profile)";
           return `
           <tr>
             <td>${escapeHtml(u.username)}</td>
             <td>${escapeHtml(u.role)}</td>
-            <td>${escapeHtml(u.startView || "slides")}</td>
+            <td>${escapeHtml(startProfileName)}</td>
             <td>
               <div class="admin-actions">
                 <button class="admin-action" data-action="user-edit" data-id="${u.id}">Edit</button>
@@ -1001,7 +1009,7 @@
       </div>
       <table class="admin-table">
         <thead>
-          <tr><th>User</th><th>Role</th><th>Start View</th><th></th></tr>
+          <tr><th>User</th><th>Role</th><th>Start Profile</th><th></th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -1025,10 +1033,9 @@
                 </select>
               </div>
               <div class="admin-field">
-                <label>Start view</label>
-                <select data-role="user-start-view">
-                  <option value="slides" ${editing.startView === "slides" ? "selected" : ""}>Slides</option>
-                  <option value="wall" ${editing.startView === "wall" ? "selected" : ""}>Overview Wall</option>
+                <label>Start profile</label>
+                <select data-role="user-start-profile">
+                  ${profileSelect(editing.startProfileId)}
                 </select>
               </div>
               <div class="admin-actions">
@@ -1223,8 +1230,8 @@
       adminState.draftUser.role = target.value;
       return;
     }
-    if (target.dataset.role === "user-start-view" && adminState.draftUser) {
-      adminState.draftUser.startView = target.value;
+    if (target.dataset.role === "user-start-profile" && adminState.draftUser) {
+      adminState.draftUser.startProfileId = target.value;
       return;
     }
     if (target.dataset.role === "slide-name") {
@@ -1294,8 +1301,7 @@
     const username = cleanText(form.querySelector("[data-role='user-username']")?.value);
     const password = cleanText(form.querySelector("[data-role='user-password']")?.value, "");
     const role = cleanText(form.querySelector("[data-role='user-role']")?.value, "video");
-    const startView = cleanText(form.querySelector("[data-role='user-start-view']")?.value, "slides");
-    const startProfileId = "";
+    const startProfileId = cleanText(form.querySelector("[data-role='user-start-profile']")?.value, "");
     const profiles = [];
 
     if (!username || !role) return;
@@ -1303,8 +1309,8 @@
     const payload = {
       username,
       role,
-      startView,
-      startProfileId: null,
+      startView: "slides",
+      startProfileId: startProfileId || null,
       profiles,
     };
     if (password) payload.password = password;

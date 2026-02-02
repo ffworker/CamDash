@@ -130,6 +130,7 @@
   let snapshotTimer = null;
   let snapshotsPaused = false;
   let livePc = null;
+  let tilePcs = [];
   let currentProfileAllowLive = false;
   let isAuthed = false;
   let liveStateLabel = null;
@@ -936,7 +937,7 @@
             <div class="admin-field">
               <label>
                 <input id="profileAllowLiveInput" type="checkbox" ${adminState.profileAllowLive ? "checked" : ""}/>
-                Enable live pop-out for this profile
+                Snapshots + click-to-live (unchecked = inline live video tiles)
               </label>
             </div>
             <div class="admin-actions">
@@ -1737,8 +1738,8 @@ function renderUserSection() {
     corner.className = "corner";
     corner.textContent = config.ui.labels.live;
 
-    const markOk = () => {
-      if (state) state.textContent = "snapshot";
+    const markOk = (msg) => {
+      if (state) state.textContent = msg || "live";
       if (ping) ping.classList.remove("err", "warn");
     };
 
@@ -1751,28 +1752,51 @@ function renderUserSection() {
     };
 
     const streamId = source || id;
-    const img = document.createElement("img");
-    img.alt = label || streamId;
-    const refresh = () => {
-      img.src = snapshotUrl(streamId);
-    };
-    img.addEventListener("load", markOk);
-    img.addEventListener("error", () => markFatal("snapshot"));
-    refresh();
-    const interval = setInterval(refresh, config.snapwall.refreshSeconds * 1000);
 
     if (currentProfileAllowLive) {
+      // Snapshot + click-to-live
+      const img = document.createElement("img");
+      img.alt = label || streamId;
+      const refresh = () => {
+        img.src = snapshotUrl(streamId);
+      };
+      img.addEventListener("load", () => markOk("snapshot"));
+      img.addEventListener("error", () => markFatal("snapshot"));
+      refresh();
+      const interval = setInterval(refresh, config.snapwall.refreshSeconds * 1000);
       tile.addEventListener("click", () => {
         openLive({ source: streamId, name: name || label || id });
       });
       tile.classList.add("clickable");
+      cleanupFns.push(() => clearInterval(interval));
+      tile.appendChild(img);
+    } else {
+      // Inline live video (WebRTC)
+      const video = document.createElement("video");
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+
+      playWebrtc(video, webrtcUrl(streamId), tilePcs)
+        .then((ok) => {
+          if (ok) markOk("live");
+          else markFatal("webrtc");
+        })
+        .catch(() => markFatal("webrtc"));
+
+      cleanupFns.push(() => {
+        try {
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+          video.srcObject = null;
+        } catch (_) {}
+      });
+
+      tile.appendChild(video);
     }
 
-    cleanupFns.push(() => {
-      clearInterval(interval);
-    });
-
-    tile.appendChild(img);
     if (config.ui.showLiveBadge) tile.appendChild(corner);
     return tile;
   }
@@ -1902,6 +1926,12 @@ function renderUserSection() {
     if (livePc) {
       try { livePc.close(); } catch (_) {}
       livePc = null;
+    }
+    if (tilePcs && tilePcs.length) {
+      tilePcs.forEach((pc) => {
+        try { pc.close(); } catch (_) {}
+      });
+      tilePcs = [];
     }
   }
 

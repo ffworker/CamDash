@@ -22,6 +22,8 @@
     timerChip: document.getElementById("timerChip"),
     timerSelect: document.getElementById("timerSelect"),
     pageChip: document.getElementById("pageChip"),
+    profileChip: document.getElementById("profileChip"),
+    profileSelect: document.getElementById("profileSelect"),
     clockChip: document.getElementById("clockChip"),
     prevLabel: document.getElementById("prevLabel"),
     nextLabel: document.getElementById("nextLabel"),
@@ -298,6 +300,7 @@
     dataState = state;
     maxCamsPerSlide = toInt(state?.maxCamsPerSlide, 6) || 6;
     fillKioskProfiles();
+    renderProfileSelector();
     applyRoleUi();
     let nextPages = buildPagesFromState(state);
     if (!nextPages.length) {
@@ -394,6 +397,14 @@
           if (!t) return;
           setTimer(t);
         });
+      });
+    }
+
+    if (dom.profileSelect) {
+      dom.profileSelect.addEventListener("change", () => {
+        roleProfileId = dom.profileSelect.value || "";
+        saveLocal(STORAGE.roleProfile, roleProfileId);
+        setRemoteState(dataState, false);
       });
     }
 
@@ -567,6 +578,7 @@
       setVisible(dom.adminBtn, false);
       setVisible(dom.wallBtn, false);
       setVisible(dom.logoutBtn, false);
+      setVisible(dom.profileChip, false);
       setVisible(dom.prevBtn, false);
       setVisible(dom.nextBtn, false);
       setVisible(dom.timerChip, false);
@@ -587,6 +599,9 @@
     const showWall = false; // disable wall toggle; slides-only start view
     setVisible(dom.wallBtn, showWall);
     setVisible(dom.logoutBtn, true);
+
+    const showProfileSelect = role === "admin" && config.dataSource.mode === "remote";
+    setVisible(dom.profileChip, showProfileSelect);
 
     const showNav = config.ui.showNav && (role === "admin" || role === "priv");
     setVisible(dom.prevBtn, showNav);
@@ -625,6 +640,20 @@
     const desired = roleProfileId || dataState.activeProfileId;
     if (desired) select.value = desired;
     setVisible(dom.kioskSelectWrap, true);
+  }
+
+  function renderProfileSelector() {
+    if (!dom.profileSelect) return;
+    dom.profileSelect.innerHTML = "";
+    if (!dataState?.profiles) return;
+    const desired = roleProfileId || dataState.activeProfileId || "";
+    dataState.profiles.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name || "Profile";
+      dom.profileSelect.appendChild(opt);
+    });
+    if (desired) dom.profileSelect.value = desired;
   }
 
   async function ensureAdminAccess() {

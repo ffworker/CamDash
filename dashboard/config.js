@@ -70,11 +70,11 @@
   // Hls.js tuning (optional overrides)
   hls: {
     // Stable defaults for go2rtc HLS
-    liveSyncDurationCount: 3,
-    maxLiveSyncPlaybackRate: 1.25,
-    maxBufferLength: 12,
-    backBufferLength: 30,
-    maxMaxBufferLength: 20,
+    liveSyncDurationCount: 8,
+    maxLiveSyncPlaybackRate: 1.05,
+    maxBufferLength: 60,
+    backBufferLength: 90,
+    maxMaxBufferLength: 120,
     enableWorker: true,
   },
 

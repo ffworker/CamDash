@@ -1,6 +1,6 @@
 ﻿
 /*
- * CamDash - CCTV dashboard with paging, auto cycling, and HLS playback.
+ * CamDash - CCTV dashboard with paging, auto cycling, and WebRTC playback.
  */
 
 (() => {
@@ -82,16 +82,9 @@
       ok: "live",
       buffer: "buffer",
       fatal: "fatal",
-      unsupported: "HLS unsupported",
+      unsupported: "WebRTC unsupported",
       configMissing: "config.js fehlt/leer",
       adminTitle: "CamDash Admin",
-    },
-    hls: {
-      liveSyncDurationCount: 3,
-      maxLiveSyncPlaybackRate: 1.0,
-      maxBufferLength: 8,
-      maxMaxBufferLength: 16,
-      enableWorker: true,
     },
   };
 
@@ -184,7 +177,6 @@
 
   function normalizeConfig(cfgValue) {
     const ui = cfgValue.ui && typeof cfgValue.ui === "object" ? cfgValue.ui : {};
-    const hls = cfgValue.hls && typeof cfgValue.hls === "object" ? cfgValue.hls : {};
     const labels = ui.labels && typeof ui.labels === "object" ? ui.labels : {};
     const theme = ui.theme && typeof ui.theme === "object" ? ui.theme : {};
     const base = typeof cfgValue.go2rtcBase === "string" ? cfgValue.go2rtcBase.trim() : "";
@@ -231,7 +223,6 @@
         labels: { ...DEFAULTS.labels, ...labels },
         theme,
       },
-      hls: { ...DEFAULTS.hls, ...hls },
       pages: Array.isArray(cfgValue.pages) ? cfgValue.pages : [],
     };
   }
@@ -1927,7 +1918,7 @@
 
     destroyLivePlayers();
 
-    // Prefer WebRTC for lower latency; fall back to HLS.
+    // WebRTC only (no HLS fallback).
     const webrtcOk = await playWebrtc(video, webrtcUrl(streamId), "live");
     if (webrtcOk) return;
 

@@ -1,6 +1,6 @@
 # CamDash
 
-CamDash is a lightweight CCTV dashboard for kiosk and monitoring screens. It shows live HLS tiles, supports page cycling, and can be centrally configured through a small API and SQLite database.
+CamDash is a lightweight CCTV dashboard for kiosk and monitoring screens. It shows live WebRTC tiles, supports page cycling, and can be centrally configured through a small API and SQLite database.
 
 ## What you get
 - Kiosk-first UI with hidden topbar
@@ -12,7 +12,7 @@ CamDash is a lightweight CCTV dashboard for kiosk and monitoring screens. It sho
 ## Architecture
 - `dashboard/` static UI (kiosk)
 - `api/` Node + SQLite API (config storage)
-- `go2rtc` (optional) to proxy/convert RTSP -> HLS
+- `go2rtc` to proxy/convert RTSP -> WebRTC
 - `nginx` serves the UI and proxies API + go2rtc
 
 ## Installation and run (Docker)
@@ -26,7 +26,7 @@ docker compose up -d --build
 ```
 
 What starts:
-- `go2rtc` (RTSP -> HLS, optional but recommended)
+- `go2rtc` (RTSP -> WebRTC)
 - `api` (CamDash config storage)
 - `nginx` (serves UI + proxies API + go2rtc)
 
@@ -74,12 +74,12 @@ Changes are stored in `./data/camdash.db`.
 
 ## Configuration (dashboard/config.js)
 Key options:
-- `go2rtcBase`: base URL for HLS (`http://<server>:1984`) or empty for `/api`
+- `go2rtcBase`: base URL for go2rtc (`http://<server>:1984`) or empty for `/api`
 - `dataSource.mode`: `remote` (DB) or `local` (use `pages` below)
 - `dataSource.apiBase`: API base path (`/camdash-api`)
 - `dataSource.refreshSeconds`: refresh interval for remote state
 - `ui.*`: display toggles, labels, theme overrides
-- `hls.*`: Hls.js tuning
+  (HLS has been removed; playback is WebRTC-only.)
 - `pages`: local fallback pages (used only if `dataSource.mode = "local"`)
 
 ## Import existing config
@@ -122,30 +122,31 @@ Options:
 - `--dry-run` print summary
 
 ## go2rtc
-If you use go2rtc, define streams in `go2rtc.yml` and reference the stream ID in the camera source (e.g., `einfahrt_2`).
+Define streams in `go2rtc.yml` and reference the stream ID in the camera source (e.g., `einfahrt_2`). WebRTC is the only playback path now (no HLS fallback).
 
-## go2rtc host configuration
-Default (recommended): the dashboard uses the same-origin `/api` proxy handled by nginx, so browsers never need direct access to go2rtc.
+## go2rtc host configuration (WebRTC)
+Default: the dashboard uses the same-origin `/api` proxy handled by nginx, so browsers never need direct access to go2rtc signaling.
 
 - Leave `CAMDASH_GO2RTC_HOST` and `CAMDASH_GO2RTC_PORT` **unset** to use the proxy.
-- If you want the dashboard to hit go2rtc directly (e.g., no nginx in front), set the env vars in the API container:
+- Expose port `8555` (WebRTC media) and `1984` (signaling/UI) on the host. See `docker-compose.yml`.
+- Add a LAN candidate in `go2rtc.yml` so browsers can reach media over the LAN:
   ```yaml
-  # in docker-compose.yml (api service)
-  environment:
-    - CAMDASH_GO2RTC_HOST=host.docker.internal  # or the go2rtc hostname/IP
-    - CAMDASH_GO2RTC_PORT=1984
+  webrtc:
+    listen: ":8555"
+    candidates:
+      - "host.docker.internal:8555" # resolves to the Docker host via host-gateway
   ```
 
 ## Troubleshooting
 - No cameras after git pull: the DB is empty. Use Admin UI or import.
 - API offline: check `docker compose ps` and `/camdash-api/health`.
-- HLS unsupported: ensure Hls.js loads or use Safari/native HLS.
+- WebRTC stuck on “connecting”: ensure port 8555 is reachable from the browser, and a correct LAN candidate is set in `go2rtc.yml`. Many browsers also require HTTPS or localhost for WebRTC.
 
 ## Known limitations / TODO
 - Passwords are plaintext; add hashing and stronger auth if exposing to untrusted networks.
 - No CSRF protection (token in Authorization header; keep as-is or move to HttpOnly cookie with CSRF token).
 - No per-camera recording links yet.
-- No WebRTC fallback; HLS only.
+- WebRTC only; ensure correct candidates and firewall rules.
 - Upgrade HTTP -> HTTPS (terminate TLS at nginx).
 
 ## Security note

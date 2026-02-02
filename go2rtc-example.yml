@@ -33,3 +33,6 @@ rtsp:
   listen: ":8554"
 webrtc:
   listen: ":8555"
+  # host.docker.internal resolves to the Docker host; works with Docker Desktop / host-gateway extra_hosts
+  candidates:
+    - "host.docker.internal:8555"

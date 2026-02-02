@@ -9,6 +9,8 @@ services:
       - "1984:1984"   # web UI / signaling
       - "8554:8554"   # RTSP (optional)
       - "8555:8555"   # WebRTC (UDP/TCP)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # resolve host IP for WebRTC candidates
 
   web:
     image: nginx:alpine

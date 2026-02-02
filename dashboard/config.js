@@ -48,7 +48,7 @@
       ok: "live",
       buffer: "buffer",
       fatal: "fatal",
-      unsupported: "HLS unsupported",
+      unsupported: "WebRTC unsupported",
       configMissing: "config.js fehlt/leer",
     },
     theme: {
@@ -65,17 +65,6 @@
       // gap: "clamp(10px,1.2vw,16px)",
       // topbarHeight: "64px",
     },
-  },
-
-  // Hls.js tuning (optional overrides)
-  hls: {
-    // Stable defaults for go2rtc HLS
-    liveSyncDurationCount: 8,
-    maxLiveSyncPlaybackRate: 1.05,
-    maxBufferLength: 60,
-    backBufferLength: 90,
-    maxMaxBufferLength: 120,
-    enableWorker: true,
   },
 
   pages: [

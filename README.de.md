@@ -1,6 +1,6 @@
 # CamDash (Deutsch)
 
-CamDash ist ein leichtgewichtiges CCTV-Dashboard für Kiosk- und Monitoring-Screens. Es zeigt Live-HLS-Kacheln, unterstützt das automatische Durchblättern der Slides und speichert Konfigurationen zentral in einer SQLite-DB.
+CamDash ist ein leichtgewichtiges CCTV-Dashboard für Kiosk- und Monitoring-Screens. Es zeigt Live-WebRTC-Kacheln (kein HLS mehr), unterstützt das automatische Durchblättern der Slides und speichert Konfigurationen zentral in einer SQLite-DB.
 
 ## Installation & Start (Docker)
 Voraussetzungen:
@@ -22,7 +22,7 @@ Admin-UI öffnen:
 ## Admin-Login
 Standard-Zugangsdaten (aus `docker-compose.yml`):
 - Benutzer: `admin`
-- Passwort: `changeme`
+- Passwort: `29Logserv75`
 
 Ändern in `docker-compose.yml`:
 ```
@@ -40,6 +40,16 @@ CAMDASH_ADMIN_PASS=deinpass
 ```bash
 node api/import-config.js --reset --replace --profile "Default"
 ```
+
+## WebRTC-Hinweis
+- Port 8555 (UDP/TCP) muss im LAN erreichbar sein.
+- In `go2rtc.yml` einen LAN-Kandidaten setzen, z. B.:
+  ```yaml
+  webrtc:
+    listen: ":8555"
+    candidates:
+      - "host.docker.internal:8555" # verweist auf den Docker-Host (via host-gateway)
+  ```
 
 ## Weitere Dokumente
 - English default: `README.md`

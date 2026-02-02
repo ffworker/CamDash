@@ -135,6 +135,7 @@
   let roleProfileId = loadLocal(STORAGE.roleProfile) || "";
   let wallMode = loadLocal(STORAGE.startView) === "wall";
   let snapshotTimer = null;
+  let snapshotsPaused = false;
   let liveHls = null;
   let isAuthed = false;
   let liveStateLabel = null;
@@ -1891,6 +1892,7 @@
   }
 
   function startSnapshotRefresh() {
+    if (snapshotsPaused) return;
     if (snapshotTimer) clearInterval(snapshotTimer);
     refreshSnapshots();
     snapshotTimer = setInterval(refreshSnapshots, config.snapwall.refreshSeconds * 1000);
@@ -1900,8 +1902,22 @@
     });
   }
 
+  function pauseSnapshots() {
+    snapshotsPaused = true;
+    if (snapshotTimer) clearInterval(snapshotTimer);
+    snapshotTimer = null;
+  }
+
+  function resumeSnapshots() {
+    const wasPaused = snapshotsPaused;
+    snapshotsPaused = false;
+    if (wallMode && wasPaused) {
+      startSnapshotRefresh();
+    }
+  }
+
   function refreshSnapshots() {
-    if (!dom.grid) return;
+    if (!dom.grid || snapshotsPaused) return;
     const imgs = Array.from(dom.grid.querySelectorAll(".snap-tile img"));
     imgs.forEach((img) => {
       const src = img.dataset.src;
@@ -1912,6 +1928,7 @@
 
   async function openLive(cam) {
     if (!dom.wallOverlay || !dom.liveVideo) return;
+    pauseSnapshots();
     dom.liveName.textContent = cam.name || cam.source;
     dom.liveState.textContent = "loading…";
     liveStateLabel = dom.liveState;
@@ -1952,6 +1969,7 @@
       try { liveHls.destroy(); } catch (_) {}
       liveHls = null;
     }
+    resumeSnapshots();
     if (!silent) {
       // keep overlay hidden
     }

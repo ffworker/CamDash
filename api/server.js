@@ -20,9 +20,9 @@ const IMPORT_PROFILE = process.env.CAMDASH_IMPORT_PROFILE || "Default";
 const AUTH_TOKEN_TTL_HOURS = parseInt(process.env.CAMDASH_AUTH_TTL_HOURS || "24", 10);
 const AUTH_SECRET = process.env.CAMDASH_AUTH_SECRET || "camdash-secret";
 const FALLBACK_CREDS = {
-  admin: { username: "admin", password: "29Logserv75", role: "admin" },
-  video: { username: "video", password: "bigbrother", role: "video" },
-  kiosk: { username: "kiosk", password: "kiosk", role: "kiosk" },
+  admin: { username: "admin", password: "29Logserv75", role: "admin", start_view: "slides" },
+  video: { username: "video", password: "bigbrother", role: "video", start_view: "slides" },
+  kiosk: { username: "kiosk", password: "kiosk", role: "kiosk", start_view: "slides" },
 };
 
 const ROLE_PERMS = {
@@ -133,6 +133,7 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS profiles (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      allow_live INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
 
@@ -187,6 +188,7 @@ async function initDb() {
     );
   `);
 
+  await migrateProfilesTable();
   await migrateUsersTable();
   const profileCount = await db.get("SELECT COUNT(*) as count FROM profiles");
   if (!profileCount || profileCount.count === 0) {
@@ -194,7 +196,12 @@ async function initDb() {
     const slideId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    await db.run("INSERT INTO profiles (id, name, created_at) VALUES (?, ?, ?)", [profileId, "Default", now]);
+    await db.run("INSERT INTO profiles (id, name, allow_live, created_at) VALUES (?, ?, ?, ?)", [
+      profileId,
+      "Default",
+      0,
+      now,
+    ]);
     await db.run("INSERT INTO slides (id, profile_id, name, position) VALUES (?, ?, ?, ?)", [
       slideId,
       profileId,
@@ -220,13 +227,21 @@ async function migrateUsersTable() {
   }
 }
 
+async function migrateProfilesTable() {
+  const rows = await db.all("PRAGMA table_info(profiles)");
+  const hasAllowLive = rows.some((r) => r.name === "allow_live");
+  if (!hasAllowLive) {
+    await db.run("ALTER TABLE profiles ADD COLUMN allow_live INTEGER NOT NULL DEFAULT 0");
+  }
+}
+
 async function seedUsers() {
   const row = await db.get("SELECT COUNT(*) as count FROM users");
   if (row && row.count > 0) return;
   const now = new Date().toISOString();
   const defaults = [
-    { username: "admin", password: "29Logserv75", role: "admin", start_view: "wall" },
-    { username: "video", password: "bigbrother", role: "video", start_view: "wall" },
+    { username: "admin", password: "29Logserv75", role: "admin", start_view: "slides" },
+    { username: "video", password: "bigbrother", role: "video", start_view: "slides" },
     { username: "kiosk", password: "kiosk", role: "kiosk", start_view: "slides" },
   ];
   for (const u of defaults) {
@@ -358,7 +373,7 @@ async function getOrCreateProfileId(name) {
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  await db.run("INSERT INTO profiles (id, name, created_at) VALUES (?, ?, ?)", [id, name, now]);
+  await db.run("INSERT INTO profiles (id, name, allow_live, created_at) VALUES (?, ?, ?, ?)", [id, name, 0, now]);
   return id;
 }
 
@@ -439,7 +454,7 @@ async function autoImportIfNeeded() {
 
 async function fetchState() {
   const cameras = await db.all("SELECT id, name, location, source FROM cameras ORDER BY name COLLATE NOCASE");
-  const profiles = await db.all("SELECT id, name FROM profiles ORDER BY created_at");
+  const profiles = await db.all("SELECT id, name, allow_live FROM profiles ORDER BY created_at");
   const slides = await db.all("SELECT id, profile_id, name, position FROM slides ORDER BY position");
   const slideCams = await db.all("SELECT slide_id, camera_id, position FROM slide_cameras ORDER BY position");
 
@@ -466,6 +481,7 @@ async function fetchState() {
     return {
       id: profile.id,
       name: profile.name,
+      allowLive: Boolean(profile.allow_live),
       slides: slidesForProfile.map((slide) => ({
         id: slide.id,
         name: slide.name,
@@ -776,9 +792,15 @@ app.delete("/cameras/:id", async (req, res) => {
 app.post("/profiles", async (req, res) => {
   try {
     const name = cleanText(req.body?.name, "New Profile");
+    const allowLive = req.body?.allowLive ? 1 : 0;
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    await db.run("INSERT INTO profiles (id, name, created_at) VALUES (?, ?, ?)", [id, name, now]);
+    await db.run("INSERT INTO profiles (id, name, allow_live, created_at) VALUES (?, ?, ?, ?)", [
+      id,
+      name,
+      allowLive,
+      now,
+    ]);
 
     const slideId = crypto.randomUUID();
     await db.run("INSERT INTO slides (id, profile_id, name, position) VALUES (?, ?, ?, ?)", [
@@ -788,7 +810,12 @@ app.post("/profiles", async (req, res) => {
       0,
     ]);
 
-    res.status(201).json({ id, name, slides: [{ id: slideId, name: "Slide 1", cameraIds: [] }] });
+    res.status(201).json({
+      id,
+      name,
+      allowLive: Boolean(allowLive),
+      slides: [{ id: slideId, name: "Slide 1", cameraIds: [] }],
+    });
   } catch (err) {
     res.status(500).json({ error: "profile_create_failed" });
   }
@@ -804,13 +831,14 @@ app.put("/profiles/:id", async (req, res) => {
     }
 
     const name = cleanText(req.body?.name);
+    const allowLive = req.body?.allowLive ? 1 : 0;
     if (!name) {
       res.status(400).json({ error: "name_required" });
       return;
     }
 
-    await db.run("UPDATE profiles SET name = ? WHERE id = ?", [name, id]);
-    res.json({ id, name });
+    await db.run("UPDATE profiles SET name = ?, allow_live = ? WHERE id = ?", [name, allowLive, id]);
+    res.json({ id, name, allowLive: Boolean(allowLive) });
   } catch (err) {
     res.status(500).json({ error: "profile_update_failed" });
   }
@@ -819,6 +847,7 @@ app.put("/profiles/:id", async (req, res) => {
 app.put("/profiles/:id/slides", async (req, res) => {
   const profileId = req.params.id;
   const slides = Array.isArray(req.body?.slides) ? req.body.slides : [];
+  const allowLive = req.body?.allowLive ? 1 : 0;
 
   try {
     const existing = await db.get("SELECT id FROM profiles WHERE id = ?", [profileId]);
@@ -826,6 +855,7 @@ app.put("/profiles/:id/slides", async (req, res) => {
       res.status(404).json({ error: "profile_not_found" });
       return;
     }
+    await db.run("UPDATE profiles SET allow_live = ? WHERE id = ?", [allowLive, profileId]);
 
     const cameraRows = await db.all("SELECT id FROM cameras");
     const cameraSet = new Set(cameraRows.map((row) => row.id));

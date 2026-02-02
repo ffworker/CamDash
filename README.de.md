@@ -34,7 +34,8 @@ CAMDASH_ADMIN_PASS=deinpass
 1) Kameras anlegen (Name, Ort, Quelle)
 2) Profil (Slideshow) anlegen
 3) Slides erstellen und Kameras zuweisen (max. 6 pro Slide)
-4) Profil aktiv setzen
+4) (Optional) Im Reiter Slideshows “Live-Popout aktivieren” setzen, damit Kacheln ins Livebild springen
+5) Profil aktiv setzen
 
 ## Import vorhandener Konfiguration
 ```bash

@@ -105,6 +105,7 @@
     selectedProfileId: null,
     draftSlides: null,
     draftProfileName: "",
+    profileAllowLive: false,
     editingCameraId: null,
     users: [],
     profiles: [],
@@ -126,15 +127,16 @@
   let pagesSignature = "";
   let role = null; // kiosk | priv | admin (set after auth)
   let roleProfileId = loadLocal(STORAGE.roleProfile) || "";
-  let wallMode = loadLocal(STORAGE.startView) === "wall";
+  let wallMode = false; // default to slides view
   let snapshotTimer = null;
   let snapshotsPaused = false;
   let livePc = null;
+  let currentProfileAllowLive = false;
   let isAuthed = false;
   let liveStateLabel = null;
   let authToken = loadLocal(STORAGE.token) || "";
   role = loadLocal(STORAGE.role) || null;
-  wallMode = loadLocal(STORAGE.startView) === "wall";
+  wallMode = false;
 
   init().catch((err) => {
     console.error("CamDash init failed", err);
@@ -320,6 +322,7 @@
   }
 
   function buildPagesFromState(state) {
+    currentProfileAllowLive = false;
     const profiles = Array.isArray(state?.profiles) ? state.profiles : [];
     const cameras = Array.isArray(state?.cameras) ? state.cameras : [];
 
@@ -331,6 +334,7 @@
 
     const activeProfile = profiles.find((profile) => profile.id === chosenProfileId) || profiles[0];
     if (!activeProfile) return [];
+    currentProfileAllowLive = Boolean(activeProfile.allowLive);
 
     const camMap = new Map(cameras.map((cam) => [cam.id, cam]));
 
@@ -344,7 +348,7 @@
           label = `${label} - ${cam.location}`;
         }
 
-        return { id: cam.source, label };
+        return { id: cam.source, label, source: cam.source, name: cam.name || cam.source };
       });
 
       return {
@@ -435,9 +439,7 @@
 
     if (dom.wallBtn) {
       dom.wallBtn.addEventListener("click", () => {
-        wallMode = !wallMode;
-        render();
-        if (!wallMode) scheduleCycle(true);
+        // Wall view disabled; keep slides-only start view
       });
     }
     if (dom.logoutBtn) {
@@ -518,8 +520,8 @@
           dom.roleError.textContent = "";
         }
         role = payload.role;
-        wallMode = payload.startView === "wall";
-        saveLocal(STORAGE.startView, wallMode ? "wall" : "slides");
+        wallMode = false;
+        saveLocal(STORAGE.startView, "slides");
         isAuthed = true;
         // honor server-selected profile for kiosk/video; admin can switch later
         if (payload.profileId) {
@@ -584,7 +586,7 @@
     const showAdmin = role === "admin" && config.dataSource.mode === "remote";
     setVisible(dom.adminBtn, showAdmin);
 
-    const showWall = role === "priv" || role === "admin";
+    const showWall = false; // disable wall toggle; slides-only start view
     setVisible(dom.wallBtn, showWall);
     setVisible(dom.logoutBtn, true);
 
@@ -857,9 +859,11 @@
       const selected = profiles.find((p) => p.id === adminState.selectedProfileId) || profiles[0];
       adminState.draftSlides = cloneSlides(selected.slides || []);
       adminState.draftProfileName = selected.name;
+      adminState.profileAllowLive = Boolean(selected.allowLive);
     }
 
     const selectedProfile = profiles.find((p) => p.id === adminState.selectedProfileId) || profiles[0];
+    adminState.profileAllowLive = Boolean(selectedProfile.allowLive);
 
     const profileItems = profiles
       .map((profile) => {
@@ -931,6 +935,12 @@
             <div class="admin-field">
               <label>Profile name</label>
               <input id="profileNameInput" type="text" value="${escapeHtml(adminState.draftProfileName || selectedProfile.name)}"/>
+            </div>
+            <div class="admin-field">
+              <label>
+                <input id="profileAllowLiveInput" type="checkbox" ${adminState.profileAllowLive ? "checked" : ""}/>
+                Enable live pop-out for this profile
+              </label>
             </div>
             <div class="admin-actions">
               <button class="admin-action" data-action="profile-name-save" data-id="${selectedProfile.id}">Save name</button>
@@ -1196,6 +1206,10 @@
       adminState.draftProfileName = target.value;
       return;
     }
+    if (target.id === "profileAllowLiveInput") {
+      adminState.profileAllowLive = target.checked;
+      return;
+    }
 
     if (target.dataset.role === "user-username" && adminState.draftUser) {
       adminState.draftUser.username = target.value;
@@ -1365,7 +1379,7 @@
     try {
       const profile = await apiFetch("/profiles", {
         method: "POST",
-        body: JSON.stringify({ name: "New Profile" }),
+        body: JSON.stringify({ name: "New Profile", allowLive: false }),
       });
 
       await refreshRemoteState(true);
@@ -1414,7 +1428,7 @@
     try {
       await apiFetch(`/profiles/${id}`, {
         method: "PUT",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, allowLive: adminState.profileAllowLive }),
       });
       await refreshRemoteState(true);
       renderAdmin();
@@ -1430,6 +1444,7 @@
     adminState.selectedProfileId = id;
     adminState.draftSlides = cloneSlides(profile.slides || []);
     adminState.draftProfileName = profile.name;
+    adminState.profileAllowLive = Boolean(profile.allowLive);
     renderProfileSection();
   }
 
@@ -1467,7 +1482,7 @@
     try {
       await apiFetch(`/profiles/${profileId}/slides`, {
         method: "PUT",
-        body: JSON.stringify({ slides }),
+        body: JSON.stringify({ slides, allowLive: adminState.profileAllowLive }),
       });
       adminState.draftSlides = null;
       adminState.draftProfileName = "";
@@ -1686,7 +1701,7 @@
     return tile;
   }
 
-  function makeTile({ id, label }) {
+  function makeTile({ id, label, source, name }) {
     const tile = document.createElement("div");
     tile.className = "tile fade";
 
@@ -1736,12 +1751,21 @@
       }
     };
 
-    playWebrtc(video, webrtcUrl(id), tilePcs)
+    const streamId = source || id;
+
+    playWebrtc(video, webrtcUrl(streamId), tilePcs)
       .then((ok) => {
         if (ok) markOk();
         else markFatal("webrtc");
       })
       .catch(() => markFatal("webrtc"));
+
+    if (currentProfileAllowLive) {
+      tile.addEventListener("click", () => {
+        openLive({ source: streamId, name: name || label || id });
+      });
+      tile.classList.add("clickable");
+    }
 
     cleanupFns.push(() => {
       try {

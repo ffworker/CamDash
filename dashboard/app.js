@@ -137,6 +137,7 @@
   let snapshotTimer = null;
   let snapshotsPaused = false;
   let liveHls = null;
+  let livePc = null;
   let isAuthed = false;
   let liveStateLabel = null;
   let authToken = loadLocal(STORAGE.token) || "";
@@ -1814,10 +1815,86 @@
     return `${base}/api/stream.m3u8?src=${encodeURIComponent(streamId)}`;
   }
 
+  function webrtcUrl(streamId) {
+    const base = config.go2rtcBase;
+    return `${base}/api/webrtc?src=${encodeURIComponent(streamId)}`;
+  }
+
   function snapshotUrl(streamId) {
     const base = config.go2rtcBase;
     const qs = `src=${encodeURIComponent(streamId)}&w=${config.snapwall.width}&h=${config.snapwall.height}&_=${Date.now()}`;
     return `${base}/api/frame.jpeg?${qs}`;
+  }
+
+  async function playWebrtc(video, apiUrl) {
+    if (typeof RTCPeerConnection === "undefined") return false;
+
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      livePc = pc;
+
+      const mediaStream = new MediaStream();
+      pc.ontrack = (evt) => {
+        if (evt.streams && evt.streams[0]) {
+          video.srcObject = evt.streams[0];
+        } else {
+          mediaStream.addTrack(evt.track);
+          video.srcObject = mediaStream;
+        }
+        video.play().catch(() => {});
+      };
+
+      pc.addTransceiver("video", { direction: "recvonly" });
+      pc.addTransceiver("audio", { direction: "recvonly" });
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/sdp" },
+        body: offer.sdp,
+      });
+      if (!res.ok) throw new Error("webrtc sdp failed");
+      const answerSdp = await res.text();
+      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+
+      const ok = await waitForWebrtc(pc, 5000);
+      if (!ok) throw new Error("webrtc timeout");
+
+      dom.liveState.textContent = "live (WebRTC)";
+      return true;
+    } catch (err) {
+      if (livePc) {
+        try { livePc.close(); } catch (_) {}
+        livePc = null;
+      }
+      return false;
+    }
+  }
+
+  function waitForWebrtc(pc, timeoutMs) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve(false);
+      }, timeoutMs);
+
+      pc.onconnectionstatechange = () => {
+        if (settled) return;
+        if (pc.connectionState === "connected") {
+          settled = true;
+          clearTimeout(timer);
+          resolve(true);
+        } else if (["failed", "closed"].includes(pc.connectionState)) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
+        }
+      };
+    });
   }
 
   async function playHls(video, src) {
@@ -1916,6 +1993,25 @@
     }
   }
 
+  function destroyLivePlayers() {
+    if (dom.liveVideo) {
+      try {
+        dom.liveVideo.pause();
+        dom.liveVideo.removeAttribute("src");
+        dom.liveVideo.load();
+        dom.liveVideo.srcObject = null;
+      } catch (_) {}
+    }
+    if (liveHls) {
+      try { liveHls.destroy(); } catch (_) {}
+      liveHls = null;
+    }
+    if (livePc) {
+      try { livePc.close(); } catch (_) {}
+      livePc = null;
+    }
+  }
+
   function refreshSnapshots() {
     if (!dom.grid || snapshotsPaused) return;
     const imgs = Array.from(dom.grid.querySelectorAll(".snap-tile img"));
@@ -1930,7 +2026,7 @@
     if (!dom.wallOverlay || !dom.liveVideo) return;
     pauseSnapshots();
     dom.liveName.textContent = cam.name || cam.source;
-    dom.liveState.textContent = "loading…";
+    dom.liveState.textContent = "connecting…";
     liveStateLabel = dom.liveState;
     dom.wallOverlay.classList.remove("hidden");
     dom.wallOverlay.setAttribute("aria-hidden", "false");
@@ -1942,13 +2038,14 @@
     const streamId = cam.source || cam.id;
     const hlsSrc = hlsUrl(streamId);
 
-    if (liveHls) {
-      try { liveHls.destroy(); } catch (_) {}
-      liveHls = null;
-    }
+    destroyLivePlayers();
 
-    const ok = await playHls(video, hlsSrc);
-    if (ok) return;
+    // Prefer WebRTC for lower latency; fall back to HLS.
+    const webrtcOk = await playWebrtc(video, webrtcUrl(streamId));
+    if (webrtcOk) return;
+
+    const hlsOk = await playHls(video, hlsSrc);
+    if (hlsOk) return;
 
     dom.liveState.textContent = "error";
   }
@@ -1958,17 +2055,7 @@
     dom.wallOverlay.classList.add("hidden");
     dom.wallOverlay.setAttribute("aria-hidden", "true");
     liveStateLabel = null;
-    if (dom.liveVideo) {
-      try {
-        dom.liveVideo.pause();
-        dom.liveVideo.removeAttribute("src");
-        dom.liveVideo.load();
-      } catch (_) {}
-    }
-    if (liveHls) {
-      try { liveHls.destroy(); } catch (_) {}
-      liveHls = null;
-    }
+    destroyLivePlayers();
     resumeSnapshots();
     if (!silent) {
       // keep overlay hidden
@@ -2017,10 +2104,7 @@
     if (snapshotTimer) clearInterval(snapshotTimer);
     snapshotTimer = null;
 
-    hlsInstances.forEach((hls) => {
-      try { hls.destroy(); } catch {}
-    });
-    hlsInstances = [];
+    destroyLivePlayers();
 
     closeLive(true);
 

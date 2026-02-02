@@ -1992,24 +1992,25 @@ function renderUserSection() {
     }
 
     const tiles = Math.max(count, 1);
-    let columns = 2;
-    let rows = 2;
+    let columns = 1;
+    let rows = 1;
 
     if (tiles <= 1) {
-      columns = 1;
-      rows = 1;
-    } else if (tiles === 2) {
-      columns = 2;
-      rows = 1;
-    } else if (tiles === 3) {
-      columns = 3;
-      rows = 1;
-    } else if (tiles === 4) {
-      columns = 2;
-      rows = 2;
+      columns = 1; rows = 1;
+    } else if (tiles <= 2) {
+      columns = 2; rows = 1;
+    } else if (tiles <= 4) {
+      columns = 2; rows = 2;
+    } else if (tiles <= 6) {
+      columns = 3; rows = 2;
+    } else if (tiles <= 9) {
+      columns = 3; rows = 3;
+    } else if (tiles <= 12) {
+      columns = 4; rows = 3;
+    } else if (tiles <= 16) {
+      columns = 4; rows = 4;
     } else {
-      columns = 3;
-      rows = 2;
+      columns = 5; rows = Math.ceil(tiles / 5);
     }
 
     dom.grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0,1fr))`;

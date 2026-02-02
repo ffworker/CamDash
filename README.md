@@ -68,7 +68,7 @@ Change them directly in `docker-compose.yml` (`CAMDASH_ADMIN_USER` / `CAMDASH_AD
 1) Add cameras (name, location, source)
 2) Create a profile (slideshow)
 3) Create slides and assign up to 6 cameras per slide
-4) (Optional) In Slideshows tab, check “Enable live pop-out” on a profile to allow clicking tiles for live view
+4) (Optional) In Slideshows tab, check “Enable live pop-out” so tiles (snapshots) open live feed on click
 5) Set the profile active
 
 Changes are stored in `./data/camdash.db`.

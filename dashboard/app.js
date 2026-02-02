@@ -121,7 +121,6 @@
   let maxCamsPerSlide = 6;
   let seconds = config.defaultSeconds;
   let pageIndex = 0;
-  let tilePcs = [];
   let cleanupFns = [];
   let cycleHandle = null;
   let pagesSignature = "";
@@ -1738,14 +1737,8 @@ function renderUserSection() {
     corner.className = "corner";
     corner.textContent = config.ui.labels.live;
 
-    const video = document.createElement("video");
-    video.autoplay = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "auto";
-
     const markOk = () => {
-      if (state) state.textContent = config.ui.labels.ok;
+      if (state) state.textContent = "snapshot";
       if (ping) ping.classList.remove("err", "warn");
     };
 
@@ -1758,13 +1751,15 @@ function renderUserSection() {
     };
 
     const streamId = source || id;
-
-    playWebrtc(video, webrtcUrl(streamId), tilePcs)
-      .then((ok) => {
-        if (ok) markOk();
-        else markFatal("webrtc");
-      })
-      .catch(() => markFatal("webrtc"));
+    const img = document.createElement("img");
+    img.alt = label || streamId;
+    const refresh = () => {
+      img.src = snapshotUrl(streamId);
+    };
+    img.addEventListener("load", markOk);
+    img.addEventListener("error", () => markFatal("snapshot"));
+    refresh();
+    const interval = setInterval(refresh, config.snapwall.refreshSeconds * 1000);
 
     if (currentProfileAllowLive) {
       tile.addEventListener("click", () => {
@@ -1774,15 +1769,10 @@ function renderUserSection() {
     }
 
     cleanupFns.push(() => {
-      try {
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
-        video.srcObject = null;
-      } catch (_) {}
+      clearInterval(interval);
     });
 
-    tile.appendChild(video);
+    tile.appendChild(img);
     if (config.ui.showLiveBadge) tile.appendChild(corner);
     return tile;
   }
@@ -1912,12 +1902,6 @@ function renderUserSection() {
     if (livePc) {
       try { livePc.close(); } catch (_) {}
       livePc = null;
-    }
-    if (tilePcs && tilePcs.length) {
-      tilePcs.forEach((pc) => {
-        try { pc.close(); } catch (_) {}
-      });
-      tilePcs = [];
     }
   }
 

@@ -1770,6 +1770,7 @@ function renderUserSection() {
       tile.classList.add("clickable");
       cleanupFns.push(() => clearInterval(interval));
       tile.appendChild(img);
+      if (corner) corner.textContent = "SNAP";
     } else {
       // Inline live video (WebRTC)
       const video = document.createElement("video");
@@ -1795,6 +1796,7 @@ function renderUserSection() {
       });
 
       tile.appendChild(video);
+      if (corner) corner.textContent = config.ui.labels.live;
     }
 
     if (config.ui.showLiveBadge) tile.appendChild(corner);

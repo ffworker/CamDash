@@ -331,6 +331,15 @@ button{
   background:linear-gradient(180deg,var(--panel-strong),var(--panel));
   box-shadow:var(--shadow);
 }
+.tile img{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  background:#000;
+  display:block;
+}
 .tile video{
   width:100%; height:100%;
   object-fit:cover;

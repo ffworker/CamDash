@@ -48,7 +48,7 @@ node api/import-config.js --reset --replace --profile "Default"
   webrtc:
     listen: ":8555"
     candidates:
-      - "host.docker.internal:8555" # verweist auf den Docker-Host (via host-gateway)
+      - "<LAN-IP-DES-HOSTS>:8555" # z. B. 172.17.1.55
   ```
 
 ## Weitere Dokumente

@@ -33,6 +33,6 @@ rtsp:
   listen: ":8554"
 webrtc:
   listen: ":8555"
-  # LAN candidate so browsers can reach media; host.docker.internal resolves to the Docker host (Docker Desktop + host-gateway)
+  # LAN candidate so browsers can reach media. Set this to the host LAN IP that browsers use.
   candidates:
-    - "host.docker.internal:8555"
+    - "172.17.1.55:8555"

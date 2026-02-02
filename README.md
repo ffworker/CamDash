@@ -134,7 +134,7 @@ Default: the dashboard uses the same-origin `/api` proxy handled by nginx, so br
   webrtc:
     listen: ":8555"
     candidates:
-      - "host.docker.internal:8555" # resolves to the Docker host via host-gateway
+      - "<LAN-IP-OF-HOST>:8555" # example: 172.17.1.55
   ```
 
 ## Troubleshooting

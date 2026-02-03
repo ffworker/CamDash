@@ -1,31 +1,9 @@
-﻿streams:
-  einfahrt_1: "rtsp://admin:password@<CAMERA_IP_1>:554/Master-0"
-  einfahrt_2: "rtsp://admin:password@<CAMERA_IP_2>:554/Master-0"
-  rampe_1: "rtsp://admin:password@<CAMERA_IP_3>:554/Master-0"
-  rampe_2: "rtsp://admin:password@<CAMERA_IP_4>:554/live"
-  ausfahrt: "rtsp://admin:password@<CAMERA_IP_5>:554/Master-0"
-  ausfahrt_schranke: "rtsp://admin:password@<CAMERA_IP_6>:554/Master-0"
-
-  turm: "rtsp://admin:password@<CAMERA_IP_7>:554/live"
-  schranke: "rtsp://admin:password@<CAMERA_IP_8>:554/live"
-  container: "rtsp://admin:password@<CAMERA_IP_9>:554/live"
-  zelt: "rtsp://admin:password@<CAMERA_IP_10>:554/live"
-
-  containerlager: "rtsp://admin:password@<CAMERA_IP_11>:554/live"
-
-  fahrweg_1_1: "rtsp://admin:password@<CAMERA_IP_12>:554/Master-0"
-  fahrweg_1_2: "rtsp://admin:password@<CAMERA_IP_13>:554/Master-0"
-
-  fahrweg_2_1: "rtsp://admin:password@<CAMERA_IP_14>:554/live"
-  fahrweg_2_2: "rtsp://admin:password@<CAMERA_IP_15>:554/live"
-  fahrweg_2_3: "rtsp://admin:password@<CAMERA_IP_16>:554/cam/realmonitor?channel=1&subtype=00&authbasic=YWRtaW46MTJMb2dzZXJ2MzQ="
-  fahrweg_2_4: "rtsp://admin:password@<CAMERA_IP_17>:554/live"
-  mittelgang: "rtsp://admin:password@<CAMERA_IP_18>:554/Master-0"
-
-  fahrweg_3_1: "rtsp://admin:password@<CAMERA_IP_19>:554/live"
-  fahrweg_3_2: "rtsp://admin:password@<CAMERA_IP_20>:554/live"
-  fahrweg_3_3: "rtsp://admin:password@<CAMERA_IP_21>:554/live"
-  fahrweg_3_4: "rtsp://admin:password@<CAMERA_IP_22>:554/Master-0"
+streams:
+  # Minimal examples. Replace IPs/hostnames, usernames, and passwords.
+  front_gate: "rtsp://user:pass@192.168.1.10:554/stream1"                     # generic main stream
+  warehouse:  "rtsp://user:pass@192.168.1.11:554/cam/realmonitor?channel=1&subtype=0" # Dahua/Hik style path
+  parking_sub: "rtsp://user:pass@192.168.1.12:554/Streaming/Channels/102"      # substream example
+  office:     "rtsp://user:pass@camera-hostname:554/live"                      # hostname instead of IP
 
 api:
   listen: ":1984"
@@ -34,4 +12,4 @@ rtsp:
 webrtc:
   listen: ":8555"
   candidates:
-    - "172.17.1.55:8555" # replace with your host LAN IP
+    - "192.168.1.5:8555" # replace with your host LAN IP

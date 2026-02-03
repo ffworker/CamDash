@@ -14,14 +14,14 @@ const MAX_CAMS_PER_SLIDE = parseInt(process.env.CAMDASH_MAX_CAMS || "6", 10);
 const ADMIN_USER = process.env.CAMDASH_ADMIN_USER || "";
 const ADMIN_PASS = process.env.CAMDASH_ADMIN_PASS || "";
 const AUTH_ENABLED = Boolean(ADMIN_USER && ADMIN_PASS);
-const IMPORT_GO2RTC_PATH = process.env.CAMDASH_IMPORT_GO2RTC || path.join(__dirname, "..", "go2rtc.yml");
-const IMPORT_CONFIG_PATH = process.env.CAMDASH_IMPORT_CONFIG || path.join(__dirname, "..", "dashboard", "config.js");
+const IMPORT_GO2RTC_PATH = process.env.CAMDASH_IMPORT_GO2RTC || path.join(__dirname, "..", "config", "go2rtc.yml");
+const IMPORT_CONFIG_PATH = process.env.CAMDASH_IMPORT_CONFIG || path.join(__dirname, "..", "config", "config.js");
 const IMPORT_PROFILE = process.env.CAMDASH_IMPORT_PROFILE || "Default";
 const AUTH_TOKEN_TTL_HOURS = parseInt(process.env.CAMDASH_AUTH_TTL_HOURS || "24", 10);
 const AUTH_SECRET = process.env.CAMDASH_AUTH_SECRET || "camdash-secret";
 const FALLBACK_CREDS = {
-  admin: { username: "admin", password: "29Logserv75", role: "admin", start_view: "slides" },
-  video: { username: "video", password: "bigbrother", role: "video", start_view: "slides" },
+  admin: { username: ADMIN_USER || "admin", password: ADMIN_PASS || "change-me", role: "admin", start_view: "slides" },
+  video: { username: "video", password: "video", role: "video", start_view: "slides" },
   kiosk: { username: "kiosk", password: "kiosk", role: "kiosk", start_view: "slides" },
 };
 
@@ -239,12 +239,7 @@ async function seedUsers() {
   const row = await db.get("SELECT COUNT(*) as count FROM users");
   if (row && row.count > 0) return;
   const now = new Date().toISOString();
-  const defaults = [
-    { username: "admin", password: "29Logserv75", role: "admin", start_view: "slides" },
-    { username: "video", password: "bigbrother", role: "video", start_view: "slides" },
-    { username: "kiosk", password: "kiosk", role: "kiosk", start_view: "slides" },
-  ];
-  for (const u of defaults) {
+  for (const u of Object.values(FALLBACK_CREDS)) {
     await db.run("INSERT INTO users (id, username, password, role, start_view, created_at) VALUES (?,?,?,?,?,?)", [
       crypto.randomUUID(),
       u.username,
@@ -571,7 +566,7 @@ app.post("/auth/login", async (req, res) => {
 // 2) Request hostname
 // 3) empty (client will fall back to same-origin)
 app.get("/dashboard/config.js", (req, res) => {
-  const configPath = path.join(__dirname, "..", "dashboard", "config.js");
+  const configPath = IMPORT_CONFIG_PATH;
   fs.readFile(configPath, "utf8", (err, data) => {
     if (err) {
       res.status(500).type("text/plain").send("// failed to load config.js\n");

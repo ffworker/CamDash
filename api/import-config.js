@@ -11,8 +11,8 @@ const args = process.argv.slice(2);
 const options = parseArgs(args);
 
 const ROOT = path.resolve(__dirname, "..");
-const GO2RTC_PATH = path.resolve(options.go2rtcPath || path.join(ROOT, "go2rtc.yml"));
-const CONFIG_PATH = path.resolve(options.configPath || path.join(ROOT, "dashboard", "config.js"));
+const GO2RTC_PATH = path.resolve(options.go2rtcPath || path.join(ROOT, "config", "go2rtc.yml"));
+const CONFIG_PATH = path.resolve(options.configPath || path.join(ROOT, "config", "config.js"));
 const DB_PATH = path.resolve(options.dbPath || path.join(ROOT, "data", "camdash.db"));
 const PROFILE_NAME = options.profileName || "Default";
 

@@ -1,5 +1,7 @@
 FROM nginx:alpine
 
+RUN apk upgrade --no-cache
+
 # Static dashboard assets
 COPY dashboard/ /usr/share/nginx/html/
 

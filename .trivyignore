@@ -1,0 +1,9 @@
+# Temporary risk acceptance for sqlite3/node-gyp transitive tooling deps.
+# Reason: These are pulled in by sqlite3 build tooling and are not directly used by CamDash runtime logic.
+# Action: Remove these entries as soon as sqlite3/node-gyp ships patched dependency graph.
+# Review date: 2026-03-01
+
+CVE-2025-64756
+CVE-2026-23745
+CVE-2026-23950
+CVE-2026-24842

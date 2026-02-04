@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: go2rtc
+spec:
+  type: LoadBalancer
+  selector:
+    app: go2rtc
+  ports:
+    - name: http
+      port: 1984
+      targetPort: 1984
+      protocol: TCP
+    - name: rtsp
+      port: 8554
+      targetPort: 8554
+      protocol: TCP
+    - name: webrtc
+      port: 8555
+      targetPort: 8555
+      protocol: UDP

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: camdash-go2rtc
+data:
+  go2rtc.yaml: |
+    streams:
+      # Replace with your own RTSP URLs and credentials.
+      front_gate: "rtsp://user:pass@192.168.1.10:554/stream1"
+      warehouse: "rtsp://user:pass@192.168.1.11:554/cam/realmonitor?channel=1&subtype=0"
+      parking_sub: "rtsp://user:pass@192.168.1.12:554/Streaming/Channels/102"
+      office: "rtsp://user:pass@camera-hostname:554/live"
+
+    api:
+      listen: ":1984"
+    rtsp:
+      listen: ":8554"
+    webrtc:
+      listen: ":8555"
+      candidates:
+        - "REPLACE_WITH_EXTERNAL_IP:8555" # e.g. load balancer or node IP

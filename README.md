@@ -9,56 +9,51 @@ CamDash is a lightweight CCTV dashboard for kiosk/monitoring screens. It shows l
 - Admin UI to add cameras and build slideshows
 - Central config stored in SQLite (not browser storage)
 
-## Quick start (Docker)
-1) Copy the env template and fill it:
+## Quick start (Kubernetes)
+1) Build and tag images (adjust registry/tag as needed):
    ```bash
-   cp .env.example .env
-   # edit admin password, secrets, ports, paths
+   docker build -t camdash-api:local api
+   docker build -t camdash-web:local -f dashboard/Dockerfile .
    ```
-2) Copy the camera template and fill your streams:
+   For remote clusters, push these tags to your registry and update the images in `k8s/deployment-*.yaml` or run `kustomize edit set image`.
+2) Configure before deploy:
+   - Edit `k8s/secret-camdash.yaml` with your admin credentials and auth secret.
+   - Edit `k8s/config-go2rtc.yaml` with your RTSP URLs and set `webrtc.candidates` to the external IP:8555 of the `go2rtc` service (LoadBalancer or node IP).
+   - Optional: tweak UI defaults in `k8s/config-dashboard.yaml`.
+3) Deploy:
    ```bash
-   cp config/go2rtc.example.yml config/go2rtc.yml
-   # edit per-camera RTSP URLs and LAN candidate
+   kubectl apply -k k8s
+   kubectl wait -n camdash --for=condition=available deploy/api deploy/web deploy/go2rtc
    ```
-   (Optional) adjust UI defaults in `config/config.js`.
-3) Launch everything:
+4) Access:
    ```bash
-   docker compose up -d --build
+   kubectl get svc -n camdash
+   kubectl get ingress -n camdash
    ```
-4) Open the UI: `http://<host>:${HTTP_PORT:-8080}/`
-   - Admin UI: `http://<host>:${HTTP_PORT:-8080}/?admin=1` or press `Ctrl + Shift + A`.
+   Add a hosts entry for `camdash.local` pointing to your ingress/LoadBalancer IP, then open `http://camdash.local/` (Admin UI: `/?admin=1` or `Ctrl+Shift+A`).
 
 ## Config layout (single place)
-All editable, deployment-specific files live in `config/` and are git-ignored:
-- `.env` (copied from `.env.example`): runtime env vars for API, ports, import paths.
-- `config/go2rtc.yml`: RTSP/WebRTC sources for go2rtc.
-- `config/config.js`: dashboard defaults (UI labels/theme + optional local pages).
-- `config/go2rtc.example.yml`, `config/config.example.js`: templates for new installs.
+Kubernetes now owns runtime configuration:
+- `k8s/config-go2rtc.yaml`: go2rtc stream + candidate config (ConfigMap `camdash-go2rtc` mounted at `/config/go2rtc.yaml`).
+- `k8s/config-dashboard.yaml`: dashboard defaults served as `/usr/share/nginx/html/config.js`.
+- `k8s/secret-camdash.yaml`: admin user/pass + auth secret (mounted as env vars).
+- SQLite DB lives on PVC `camdash-data` mounted at `/data` in the API pod.
 
-Runtime mounts:
-- go2rtc reads `config/go2rtc.yml` (mounted to `/config/go2rtc.yaml`).
-- API imports from `config/go2rtc.yml` + `config/config.js` on first start if the DB is empty.
-- Nginx serves the same `config/config.js` to the browser (overlays `dashboard/config.js`).
+Legacy `config/` and `.env` remain as references/templates but are not used by the Kubernetes manifests.
 
 ## Key environment variables (`.env`)
-- `CAMDASH_DB` (default `/data/camdash.db`)
-- `CAMDASH_PORT` (default `3000`)
-- `CAMDASH_MAX_CAMS` (default `20` in template)
-- `CAMDASH_ADMIN_USER` / `CAMDASH_ADMIN_PASS` (set your own!)
-- `CAMDASH_AUTH_SECRET` (session signing secret)
-- `CAMDASH_IMPORT_GO2RTC` / `CAMDASH_IMPORT_CONFIG` (defaults to `/config/...`)
-- `CAMDASH_IMPORT_PROFILE` (profile name for first import)
-- `CAMDASH_GO2RTC_HOST` / `CAMDASH_GO2RTC_PORT` (override go2rtc host; leave empty to use nginx proxy)
-- Host ports: `HTTP_PORT`, `GO2RTC_HTTP_PORT`, `GO2RTC_RTSP_PORT`, `GO2RTC_WEBRTC_PORT`
+Values set in `k8s/deployment-api.yaml` (override as needed):
+- `CAMDASH_DB` (`/data/camdash.db`), `CAMDASH_PORT` (`3000`), `CAMDASH_MAX_CAMS`
+- `CAMDASH_ADMIN_USER` / `CAMDASH_ADMIN_PASS` / `CAMDASH_AUTH_SECRET` (from `Secret`)
+- `CAMDASH_IMPORT_GO2RTC` (`/config/go2rtc.yaml`), `CAMDASH_IMPORT_CONFIG` (`/config/config.js`), `CAMDASH_IMPORT_PROFILE`
+- `CAMDASH_GO2RTC_HOST` (`go2rtc` service), `CAMDASH_GO2RTC_PORT` (`1984`)
 
 ## Import / backup
-Import your filled `config/config.js` + `config/go2rtc.yml` into the DB (reset + replace slides):
+Import your filled config into the running pod (reset + replace slides):
 ```bash
-node api/import-config.js --go2rtc config/go2rtc.yml --config config/config.js --db data/camdash.db --reset --replace --profile "Default"
-```
-Container version:
-```bash
-docker compose run --rm api node /app/import-config.js --go2rtc /config/go2rtc.yml --config /config/config.js --db /data/camdash.db --reset --replace --profile "Default"
+kubectl exec -n camdash deploy/api -- node /app/import-config.js \\\
+  --go2rtc /config/go2rtc.yaml --config /config/config.js --db /data/camdash.db \\\
+  --reset --replace --profile \"Default\"
 ```
 
 ## Admin login
@@ -83,14 +78,14 @@ Add a LAN candidate in `config/go2rtc.yml`:
 webrtc:
   listen: ":8555"
   candidates:
-    - "<LAN-IP-OF-HOST>:8555" # example: 172.17.1.55
+    - "<EXTERNAL-IP-OF-go2rtc-SERVICE>:8555" # example: 34.118.10.55 or node IP
 ```
 
 ## Troubleshooting
-- Empty UI after pull: create `.env` and `config/go2rtc.yml`, then `docker compose up -d --build`.
+- Pods: `kubectl get pods -n camdash` then `kubectl logs -n camdash deploy/web|deploy/api|deploy/go2rtc`.
 - No cameras: the DB is empty—use Admin UI or re-run the import command above.
-- API offline: check `docker compose ps` and `/camdash-api/health`.
-- WebRTC stuck on "connecting": ensure port 8555 is reachable and a correct LAN candidate is set; many browsers require HTTPS or localhost for WebRTC.
+- API offline: check `/camdash-api/health` via the web pod or port-forward `kubectl port-forward -n camdash svc/api 3000:3000`.
+- WebRTC stuck on "connecting": verify the `go2rtc` service external IP/port 8555 is reachable and matches the candidate in `k8s/config-go2rtc.yaml`; browsers often require HTTPS or localhost for WebRTC.
 
 ## Known limitations
 - Passwords are plaintext in the DB; add hashing/stronger auth before Internet exposure.
@@ -102,6 +97,7 @@ webrtc:
 ## Other docs
 - German readme: `README.de.md`
 - Kiosk setup: `kiosk-setup.md`
+- Legacy Docker Compose has been replaced by Kubernetes manifests in `k8s/`. The `docker-compose.yml` is left only for reference.
 
 ## License
 MIT. See `LICENSE`.

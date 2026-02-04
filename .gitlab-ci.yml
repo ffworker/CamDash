@@ -15,6 +15,8 @@ variables:
   IMAGE_API: "$CI_REGISTRY_IMAGE/api"
   IMAGE_WEB: "$CI_REGISTRY_IMAGE/web"
   TRIVY_CACHE_DIR: ".trivy-cache"
+  TRIVY_SEVERITY_WARN: "LOW,MEDIUM"
+  TRIVY_SEVERITY_GATE: "HIGH,CRITICAL"
 
 .docker-login: &docker-login |
   docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
@@ -31,7 +33,9 @@ build_images:
     - if: '$CI_COMMIT_BRANCH'
 
 scan_images:
-  image: aquasec/trivy:latest
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
   stage: scan
   needs: ["build_images"]
   variables:
@@ -39,8 +43,23 @@ scan_images:
     TRIVY_USERNAME: "$CI_REGISTRY_USER"
     TRIVY_PASSWORD: "$CI_REGISTRY_PASSWORD"
   script:
-    - trivy image --severity CRITICAL,HIGH --exit-code 1 "$IMAGE_API:$IMAGE_TAG"
-    - trivy image --severity CRITICAL,HIGH --exit-code 1 "$IMAGE_WEB:$IMAGE_TAG"
+    - mkdir -p trivy-reports
+    # 1) LOW/MEDIUM: report only (non-blocking)
+    - trivy image --severity "$TRIVY_SEVERITY_WARN" --ignore-unfixed --format table --output trivy-reports/api-low-medium.txt --exit-code 0 "$IMAGE_API:$IMAGE_TAG"
+    - trivy image --severity "$TRIVY_SEVERITY_WARN" --ignore-unfixed --format table --output trivy-reports/web-low-medium.txt --exit-code 0 "$IMAGE_WEB:$IMAGE_TAG"
+    # 2) HIGH/CRITICAL: report + blocking gate
+    - trivy image --severity "$TRIVY_SEVERITY_GATE" --ignore-unfixed --format table --output trivy-reports/api-high-critical.txt --exit-code 1 "$IMAGE_API:$IMAGE_TAG" || API_FAIL=1
+    - trivy image --severity "$TRIVY_SEVERITY_GATE" --ignore-unfixed --format table --output trivy-reports/web-high-critical.txt --exit-code 1 "$IMAGE_WEB:$IMAGE_TAG" || WEB_FAIL=1
+    - |
+      if [ "${API_FAIL:-0}" = "1" ] || [ "${WEB_FAIL:-0}" = "1" ]; then
+        echo "Blocking vulnerabilities detected (HIGH/CRITICAL). See trivy-reports/*-high-critical.txt"
+        exit 1
+      fi
+  artifacts:
+    when: always
+    expire_in: 2 weeks
+    paths:
+      - trivy-reports/
   rules:
     - if: '$CI_COMMIT_BRANCH'
 

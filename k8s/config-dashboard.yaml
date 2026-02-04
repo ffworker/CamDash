@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: camdash-dashboard-config
+data:
+  config.js: |
+    window.CAMDASH_CONFIG = {
+      go2rtcBase: "",
+      defaultSeconds: 60,
+      autoCycle: true,
+      dataSource: {
+        mode: "remote",
+        apiBase: "/camdash-api",
+        refreshSeconds: 20,
+      },
+      ui: {
+        topbarAutoHide: true,
+        topbarHotspotPx: 6,
+        showClock: true,
+        showTimer: true,
+        showPage: true,
+        showBrand: true,
+        showNav: true,
+        showBadges: true,
+        showLiveBadge: true,
+        showEmptyLabels: true,
+        showBackgroundGrid: true,
+        compact: false,
+        layout: "auto",
+        includeLocationInLabel: true,
+        adminEnabled: true,
+        showAdminButton: false,
+        titlePrefix: "CamDash",
+        labels: {
+          prev: "Prev",
+          next: "Next",
+          timer: "Timer",
+          page: "Page",
+          clock: "Clock",
+          live: "LIVE",
+          empty: "Empty",
+          noCameras: "No cameras",
+          loading: "loading...",
+          ok: "live",
+          buffer: "buffer",
+          fatal: "fatal",
+          unsupported: "WebRTC unsupported",
+          configMissing: "config missing",
+        },
+        theme: {},
+      },
+      pages: [
+        {
+          name: "Demo",
+          cams: [
+            { id: "cam1", label: "Camera 1" },
+            { id: "cam2", label: "Camera 2" },
+            { id: "cam3", label: "Camera 3" },
+            { id: "cam4", label: "Camera 4" },
+          ],
+        },
+      ],
+    };

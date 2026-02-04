@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: camdash
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/part-of: camdash
+resources:
+  - namespace.yaml
+  - secret-camdash.yaml
+  - config-dashboard.yaml
+  - config-go2rtc.yaml
+  - pvc.yaml
+  - deployment-go2rtc.yaml
+  - service-go2rtc.yaml
+  - deployment-api.yaml
+  - service-api.yaml
+  - deployment-web.yaml
+  - service-web.yaml
+  - ingress.yaml

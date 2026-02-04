@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: camdash-api:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CAMDASH_DB
+              value: /data/camdash.db
+            - name: CAMDASH_PORT
+              value: "3000"
+            - name: CAMDASH_MAX_CAMS
+              value: "20"
+            - name: CAMDASH_IMPORT_GO2RTC
+              value: /config/go2rtc.yaml
+            - name: CAMDASH_IMPORT_CONFIG
+              value: /config/config.js
+            - name: CAMDASH_IMPORT_PROFILE
+              value: Default
+            - name: CAMDASH_GO2RTC_HOST
+              value: go2rtc
+            - name: CAMDASH_GO2RTC_PORT
+              value: "1984"
+            - name: CAMDASH_AUTH_TTL_HOURS
+              value: "24"
+          envFrom:
+            - secretRef:
+                name: camdash-secrets
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: camdash-data
+              mountPath: /data
+            - name: go2rtc-config
+              mountPath: /config/go2rtc.yaml
+              subPath: go2rtc.yaml
+              readOnly: true
+            - name: dashboard-config
+              mountPath: /config/config.js
+              subPath: config.js
+              readOnly: true
+      volumes:
+        - name: camdash-data
+          persistentVolumeClaim:
+            claimName: camdash-data
+        - name: go2rtc-config
+          configMap:
+            name: camdash-go2rtc
+            items:
+              - key: go2rtc.yaml
+                path: go2rtc.yaml
+        - name: dashboard-config
+          configMap:
+            name: camdash-dashboard-config
+            items:
+              - key: config.js
+                path: config.js

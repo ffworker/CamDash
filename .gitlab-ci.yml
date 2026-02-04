@@ -1,0 +1,65 @@
+# GitLab CI/CD for CamDash (Kubernetes-focused)
+stages:
+  - build
+  - scan
+  - deploy
+
+image: docker:24
+services:
+  - docker:24-dind
+
+variables:
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+  IMAGE_TAG: "$CI_COMMIT_SHA"
+  IMAGE_API: "$CI_REGISTRY_IMAGE/api"
+  IMAGE_WEB: "$CI_REGISTRY_IMAGE/web"
+  TRIVY_CACHE_DIR: ".trivy-cache"
+
+.docker-login: &docker-login |
+  docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+build_images:
+  stage: build
+  script:
+    - *docker-login
+    - docker build -t "$IMAGE_API:$IMAGE_TAG" api
+    - docker build -t "$IMAGE_WEB:$IMAGE_TAG" -f dashboard/Dockerfile .
+    - docker push "$IMAGE_API:$IMAGE_TAG"
+    - docker push "$IMAGE_WEB:$IMAGE_TAG"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+scan_images:
+  image: aquasec/trivy:latest
+  stage: scan
+  needs: ["build_images"]
+  variables:
+    TRIVY_CACHE_DIR: ".trivy-cache"
+    TRIVY_USERNAME: "$CI_REGISTRY_USER"
+    TRIVY_PASSWORD: "$CI_REGISTRY_PASSWORD"
+  script:
+    - trivy image --severity CRITICAL,HIGH --exit-code 1 "$IMAGE_API:$IMAGE_TAG"
+    - trivy image --severity CRITICAL,HIGH --exit-code 1 "$IMAGE_WEB:$IMAGE_TAG"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+deploy_k8s:
+  stage: deploy
+  image: bitnami/kubectl:1.29
+  needs: ["scan_images"]
+  script:
+    - echo "$KUBE_CONFIG" | base64 -d > kubeconfig
+    - export KUBECONFIG="$PWD/kubeconfig"
+    - kubectl config use-context "${KUBE_CONTEXT:-default}"
+    - kubectl kustomize k8s | sed "s|camdash-api:local|$IMAGE_API:$IMAGE_TAG|g" | sed "s|camdash-web:local|$IMAGE_WEB:$IMAGE_TAG|g" | kubectl apply -f -
+    - kubectl rollout status deploy/api -n camdash
+    - kubectl rollout status deploy/web -n camdash
+    - kubectl rollout status deploy/go2rtc -n camdash
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: false
+  environment:
+    name: production
+    url: http://camdash.local
